@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use clap::{Parser, Subcommand};
 
 use crate::environment::Environment;

@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::environment::Environment;
+use crate::{environment::Environment, simulation::Simulation};
 
 /// Schism engine command line interface.
 ///
@@ -21,6 +21,9 @@ enum Command {
     Run {
         #[arg(short, long)]
         environment: Environment,
+
+        #[arg(short, long)]
+        num_generations: u32,
     },
 }
 
@@ -29,7 +32,13 @@ impl Cli {
     pub fn run() {
         let cli = Cli::parse();
         match cli.command {
-            Command::Run { environment } => println!("running in env {environment}"),
+            Command::Run {
+                environment,
+                num_generations,
+            } => {
+                let mut sim = Simulation::new(environment, num_generations);
+                sim.run();
+            }
         }
     }
 }

@@ -141,7 +141,7 @@ impl Simulation {
             }
         }
 
-        self.print_generation_readout(&religions_at_start);
+        // self.print_generation_readout(&religions_at_start);
     }
 
     /// detailed, json-ish dump of the world state at the end of a generation.

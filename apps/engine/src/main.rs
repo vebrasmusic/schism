@@ -1,3 +1,4 @@
+mod adherent;
 mod cli;
 mod environment;
 mod probability;

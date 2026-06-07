@@ -35,7 +35,7 @@ impl Simulation {
                 .map(|adherent_id| &self.adherents[*adherent_id])
                 .collect();
 
-            if religion.should_schism(&adherents, &mut self.rng) {
+            if religion.should_schism(&adherents, &self.config.religion, &mut self.rng) {
                 schisms.push((religion_id, adherent_keys));
             }
         }
@@ -51,7 +51,8 @@ impl Simulation {
             for adherent_id in adherents {
                 let adherent = self.adherents.get_mut(*adherent_id).unwrap();
 
-                let converted = adherent.try_conversion(new_sect_id, &mut self.rng);
+                let converted =
+                    adherent.try_conversion(new_sect_id, &self.config.adherent, &mut self.rng);
                 if converted {
                     println!("someone converted")
                 }

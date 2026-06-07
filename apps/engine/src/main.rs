@@ -1,5 +1,6 @@
 mod adherent;
 mod cli;
+mod config;
 mod environment;
 mod probability;
 mod religion;
@@ -7,6 +8,6 @@ mod simulation;
 
 use cli::Cli;
 
-fn main() {
-    Cli::run();
+fn main() -> anyhow::Result<()> {
+    Cli::run()
 }

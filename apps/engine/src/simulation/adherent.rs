@@ -22,7 +22,7 @@ impl Simulation {
             }
 
             // do update on adherents
-            adherent.update(&mut self.rng);
+            adherent.update(&self.config.adherent, &mut self.rng);
 
             // exclude perosn that just died
             if adherent.is_dead() {
@@ -30,8 +30,8 @@ impl Simulation {
             }
 
             // see if they birthed someone
-            if adherent.gave_birth(&mut self.rng) {
-                births.push(Adherent::new(adherent.religion));
+            if adherent.gave_birth(&self.config.adherent, &mut self.rng) {
+                births.push(Adherent::new(adherent.religion, &self.config.adherent));
             }
 
             religion_adherents

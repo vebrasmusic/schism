@@ -73,7 +73,7 @@ impl Religion {
 
         let high_heterodoxy_share = adherents
             .iter()
-            .filter(|adherent| adherent.heterodoxy.value() > config.high_heterodoxy_threshold)
+            .filter(|adherent| adherent.heterodoxy > config.high_heterodoxy_threshold)
             .count() as f64
             / adherents.len() as f64;
 
@@ -81,7 +81,7 @@ impl Religion {
             (adherents.len() as f64 / config.population_factor_pivot).min(1.0);
 
         // clamp so a tuned-up base rate can never push us past the [0, 1] invariant
-        let chance = (config.schism_base_rate
+        let chance = (config.schism_base_rate.value()
             * avg_heterodoxy
             * (1.0 + high_heterodoxy_share)
             * population_factor)

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::environment::Environment;
+use crate::probability::UnitInterval;
 
 /// Central control board for every tunable in the simulation.
 ///
@@ -39,13 +40,13 @@ pub struct WorldConfig {
 #[serde(default)]
 pub struct AdherentConfig {
     /// heterodoxy every adherent is born with
-    pub starting_heterodoxy: f64,
+    pub starting_heterodoxy: UnitInterval,
 
     /// base chance to convert when a new sect appears, scaled by heterodoxy
-    pub conversion_base_rate: f64,
+    pub conversion_base_rate: UnitInterval,
 
     /// base per-tick heterodoxy drift, scaled by heterodoxy
-    pub heterodoxy_change_base_rate: f64,
+    pub heterodoxy_change_base_rate: UnitInterval,
 
     /// chance of death per tick, looked up by age band
     pub mortality: Vec<AgeBand>,
@@ -62,13 +63,13 @@ pub struct ReligionConfig {
     pub min_congregation: usize,
 
     /// heterodoxy strictly above this counts toward the "high heterodoxy" share
-    pub high_heterodoxy_threshold: f64,
+    pub high_heterodoxy_threshold: UnitInterval,
 
     /// congregation size at which the population factor saturates to 1.0
     pub population_factor_pivot: f64,
 
     /// base multiplier on the per-tick schism chance
-    pub schism_base_rate: f64,
+    pub schism_base_rate: UnitInterval,
 }
 
 /// A single age bracket: applies `rate` to everyone with `age <= max_age`,
@@ -77,39 +78,38 @@ pub struct ReligionConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgeBand {
     pub max_age: u8,
-    pub rate: f64,
+    pub rate: UnitInterval,
 }
 
 impl AdherentConfig {
     /// mortality rate for an adherent of the given age
-    pub fn mortality_rate(&self, age: u8) -> f64 {
+    pub fn mortality_rate(&self, age: u8) -> UnitInterval {
         Self::lookup(&self.mortality, age)
     }
 
     /// birth rate for an adherent of the given age
-    pub fn birth_rate(&self, age: u8) -> f64 {
+    pub fn birth_rate(&self, age: u8) -> UnitInterval {
         Self::lookup(&self.birth, age)
     }
 
     /// rate from the first band covering `age`. bands are validated to end in a
-    /// `u8::MAX` catch-all, so a match always exists; the 0.0 fallback only
+    /// `u8::MAX` catch-all, so a match always exists; the zero fallback only
     /// fires if that invariant is somehow broken.
-    fn lookup(bands: &[AgeBand], age: u8) -> f64 {
+    fn lookup(bands: &[AgeBand], age: u8) -> UnitInterval {
         bands
             .iter()
             .find(|band| age <= band.max_age)
             .map(|band| band.rate)
-            .unwrap_or(0.0)
+            .unwrap_or(UnitInterval::new(0.0))
     }
 }
 
-/// Everything that can be wrong with a config, surfaced as a real error so a
-/// CLI (or future HTTP handler) can report it instead of panicking.
+/// Everything that can be wrong with a config that the type system doesn't
+/// already rule out (every probability is a `UnitInterval`, so range is enforced
+/// at deserialize time). Surfaced as a real error so a CLI (or future HTTP
+/// handler) can report it instead of panicking.
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("{field} must be between 0.0 and 1.0, got {value}")]
-    ProbabilityOutOfRange { field: String, value: f64 },
-
     #[error("{field} must have at least one age band")]
     EmptyBands { field: String },
 
@@ -123,25 +123,13 @@ pub enum ConfigError {
 }
 
 impl SimulationConfig {
-    /// Check every probability is in `[0, 1]`, every divisor is positive, and
-    /// the age bands are well formed. Call this once before handing the config
-    /// to the engine.
+    /// Check the structural invariants types can't express: divisors are
+    /// positive and the age bands are well formed. Probability ranges are
+    /// already guaranteed by `UnitInterval`. Call this once before handing the
+    /// config to the engine.
     pub fn validate(&self) -> Result<(), ConfigError> {
-        check_probability("adherent.starting_heterodoxy", self.adherent.starting_heterodoxy)?;
-        check_probability("adherent.conversion_base_rate", self.adherent.conversion_base_rate)?;
-        check_probability(
-            "adherent.heterodoxy_change_base_rate",
-            self.adherent.heterodoxy_change_base_rate,
-        )?;
-
         check_bands("adherent.mortality", &self.adherent.mortality)?;
         check_bands("adherent.birth", &self.adherent.birth)?;
-
-        check_probability(
-            "religion.high_heterodoxy_threshold",
-            self.religion.high_heterodoxy_threshold,
-        )?;
-        check_probability("religion.schism_base_rate", self.religion.schism_base_rate)?;
 
         if self.religion.population_factor_pivot <= 0.0 {
             return Err(ConfigError::MustBePositive {
@@ -153,26 +141,11 @@ impl SimulationConfig {
     }
 }
 
-fn check_probability(field: &str, value: f64) -> Result<(), ConfigError> {
-    if (0.0..=1.0).contains(&value) {
-        Ok(())
-    } else {
-        Err(ConfigError::ProbabilityOutOfRange {
-            field: field.to_owned(),
-            value,
-        })
-    }
-}
-
 fn check_bands(field: &str, bands: &[AgeBand]) -> Result<(), ConfigError> {
     if bands.is_empty() {
         return Err(ConfigError::EmptyBands {
             field: field.to_owned(),
         });
-    }
-
-    for band in bands {
-        check_probability(&format!("{field} band rate"), band.rate)?;
     }
 
     let is_sorted_ascending = bands
@@ -208,22 +181,22 @@ impl Default for WorldConfig {
 impl Default for AdherentConfig {
     fn default() -> Self {
         Self {
-            starting_heterodoxy: 0.05,
-            conversion_base_rate: 0.02,
-            heterodoxy_change_base_rate: 0.01,
+            starting_heterodoxy: UnitInterval::new(0.05),
+            conversion_base_rate: UnitInterval::new(0.02),
+            heterodoxy_change_base_rate: UnitInterval::new(0.01),
             mortality: vec![
-                AgeBand { max_age: 49, rate: 0.001 },
-                AgeBand { max_age: 69, rate: 0.01 },
-                AgeBand { max_age: 79, rate: 0.05 },
-                AgeBand { max_age: u8::MAX, rate: 0.15 },
+                AgeBand { max_age: 49, rate: UnitInterval::new(0.001) },
+                AgeBand { max_age: 69, rate: UnitInterval::new(0.01) },
+                AgeBand { max_age: 79, rate: UnitInterval::new(0.05) },
+                AgeBand { max_age: u8::MAX, rate: UnitInterval::new(0.15) },
             ],
             birth: vec![
-                AgeBand { max_age: 12, rate: 0.0 },
-                AgeBand { max_age: 17, rate: 0.02 },
-                AgeBand { max_age: 25, rate: 0.12 },
-                AgeBand { max_age: 35, rate: 0.16 },
-                AgeBand { max_age: 45, rate: 0.06 },
-                AgeBand { max_age: u8::MAX, rate: 0.0 },
+                AgeBand { max_age: 12, rate: UnitInterval::new(0.0) },
+                AgeBand { max_age: 17, rate: UnitInterval::new(0.02) },
+                AgeBand { max_age: 25, rate: UnitInterval::new(0.12) },
+                AgeBand { max_age: 35, rate: UnitInterval::new(0.16) },
+                AgeBand { max_age: 45, rate: UnitInterval::new(0.06) },
+                AgeBand { max_age: u8::MAX, rate: UnitInterval::new(0.0) },
             ],
         }
     }
@@ -233,9 +206,9 @@ impl Default for ReligionConfig {
     fn default() -> Self {
         Self {
             min_congregation: 50,
-            high_heterodoxy_threshold: 0.7,
+            high_heterodoxy_threshold: UnitInterval::new(0.7),
             population_factor_pivot: 1000.0,
-            schism_base_rate: 0.01,
+            schism_base_rate: UnitInterval::new(0.01),
         }
     }
 }

@@ -35,14 +35,14 @@ impl Adherent {
             return false;
         }
 
-        let birth_rate = UnitInterval::new(config.birth_rate(self.age));
+        let birth_rate = config.birth_rate(self.age);
 
         flip_weighted_coin(birth_rate, rng)
     }
 
     pub fn new(religion: ReligionKey, config: &AdherentConfig) -> Self {
         Self {
-            heterodoxy: UnitInterval::new(config.starting_heterodoxy),
+            heterodoxy: config.starting_heterodoxy,
             age: 0,
             status: AdherentStatus::Alive,
             religion,
@@ -84,7 +84,7 @@ impl Adherent {
     }
 
     fn should_die(&mut self, config: &AdherentConfig, rng: &mut SmallRng) -> bool {
-        let mortality = UnitInterval::new(config.mortality_rate(self.age));
+        let mortality = config.mortality_rate(self.age);
 
         flip_weighted_coin(mortality, rng)
     }

@@ -2,16 +2,16 @@ use std::ops::{AddAssign, Mul, SubAssign};
 
 /// a float guaranteed to be between 0 and 1
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct UnitInterval(f32);
+pub struct UnitInterval(f64);
 
 impl UnitInterval {
-    pub const fn new(value: f32) -> Self {
+    pub const fn new(value: f64) -> Self {
         assert!(value >= 0.0 && value <= 1.0);
 
         Self(value)
     }
 
-    pub const fn value(self) -> f32 {
+    pub const fn value(self) -> f64 {
         self.0
     }
 }
@@ -23,10 +23,10 @@ impl Mul for UnitInterval {
         UnitInterval::new(self.0 * rhs.0)
     }
 }
-impl Mul<f32> for UnitInterval {
+impl Mul<f64> for UnitInterval {
     type Output = UnitInterval;
 
-    fn mul(self, rhs: f32) -> Self::Output {
+    fn mul(self, rhs: f64) -> Self::Output {
         UnitInterval::new(self.0 * rhs)
     }
 }

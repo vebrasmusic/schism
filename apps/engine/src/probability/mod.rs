@@ -1,7 +1,5 @@
-mod error;
 mod sampling;
-mod types;
+mod unit_interval;
 
-pub use error::*;
 pub use sampling::*;
-pub use types::*;
+pub use unit_interval::*;

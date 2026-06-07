@@ -1,7 +1,8 @@
-use rand::{RngExt, rngs::SmallRng};
+use rand::rngs::SmallRng;
 use slotmap::new_key_type;
 
 use crate::adherent::Adherent;
+use crate::probability::{UnitInterval, flip_weighted_coin};
 
 new_key_type! {
     pub struct ReligionKey;
@@ -29,9 +30,6 @@ pub struct Religion {
 }
 
 impl Religion {
-    /// ratio of heterodoxy / orthodoxy in population, over which a new sect is more likely to form
-    const ADHERENT_HETERODOXY_THRESHOLD: f32 = 0.3;
-
     pub fn new(parent: Option<(&Religion, ReligionKey)>) -> Self {
         match parent {
             None => Self {
@@ -63,13 +61,13 @@ impl Religion {
 
         let avg_heterodoxy = adherents
             .iter()
-            .map(|adherent| adherent.heterodoxy.value() as f64)
+            .map(|adherent| adherent.heterodoxy.value())
             .sum::<f64>()
             / adherents.len() as f64;
 
         let high_heterodoxy_share = adherents
             .iter()
-            .filter(|adherent| adherent.heterodoxy.value() as f64 > 0.7)
+            .filter(|adherent| adherent.heterodoxy.value() > 0.7)
             .count() as f64
             / adherents.len() as f64;
 
@@ -77,7 +75,7 @@ impl Religion {
 
         let chance = 0.01 * avg_heterodoxy * (1.0 + high_heterodoxy_share) * population_factor;
 
-        rng.random_bool(chance)
+        flip_weighted_coin(UnitInterval::new(chance), rng)
     }
 
     pub fn mark_extinct(&mut self) {

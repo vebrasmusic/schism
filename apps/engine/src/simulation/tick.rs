@@ -14,6 +14,11 @@ impl Simulation {
         // flag any that get born this generation. read-only, doesn't affect sim.
         let religions_at_start: HashSet<ReligionKey> = self.religions.keys().collect();
 
+        // advance the world clock one generation. religions born this tick are
+        // stamped with this year, and any that die are stamped extinct with it.
+        self.current_year += self.config.adherent.generation_length_yrs as u32;
+        let current_year = self.current_year;
+
         // get rid of any adherents that died
         self.adherents
             .retain(|_, adherent| adherent.status == AdherentStatus::Alive);
@@ -34,15 +39,13 @@ impl Simulation {
                 continue;
             }
 
-            religion.age += self.config.adherent.generation_length_yrs as u32;
-
             let adherent_keys = religion_adherents
                 .get(&religion_id)
                 .map(|keys| keys.as_slice())
                 .unwrap_or(&[]);
 
             if adherent_keys.is_empty() {
-                religion.mark_extinct();
+                religion.mark_extinct(current_year);
                 continue;
             }
 
@@ -65,7 +68,7 @@ impl Simulation {
         for (parent_id, adherents) in schisms {
             let parent = self.religions.get(parent_id).unwrap();
 
-            let new_sect = Religion::new(Some((parent, parent_id)), &mut self.rng)?;
+            let new_sect = Religion::new(Some((parent, parent_id)), current_year, &mut self.rng)?;
 
             let new_sect_id = self.religions.insert(new_sect);
 

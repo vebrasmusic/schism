@@ -65,7 +65,7 @@ impl Simulation {
         for (parent_id, adherents) in schisms {
             let parent = self.religions.get(parent_id).unwrap();
 
-            let new_sect = Religion::new(Some((parent, parent_id)));
+            let new_sect = Religion::new(Some((parent, parent_id)), &mut self.rng)?;
 
             let new_sect_id = self.religions.insert(new_sect);
 

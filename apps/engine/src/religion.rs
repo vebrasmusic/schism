@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use rand::rngs::SmallRng;
 use slotmap::new_key_type;
 mod naming;
@@ -33,21 +34,23 @@ pub struct Religion {
 }
 
 impl Religion {
-    pub fn new(parent: Option<(&Religion, ReligionKey)>) -> Self {
-        match parent {
+    pub fn new(parent: Option<(&Religion, ReligionKey)>, rng: &mut SmallRng) -> Result<Self> {
+        let result = match parent {
             None => Self {
-                name: generate_name(None),
+                name: generate_name(None, rng),
                 age: 0,
                 status: ReligionStatus::Active,
                 parent: None,
             },
             Some((parent, parent_id)) => Self {
-                name: generate_name(Some(&parent.name)),
+                name: generate_name(Some(&parent.name), rng),
                 age: 0,
                 status: ReligionStatus::Active,
                 parent: Some(parent_id),
             },
-        }
+        };
+
+        Ok(result)
     }
 
     pub fn should_schism(

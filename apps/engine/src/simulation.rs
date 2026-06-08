@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rand::{SeedableRng, rngs::SmallRng};
 use rand_distr::Distribution;
 use slotmap::SlotMap;
@@ -26,14 +26,14 @@ pub struct Simulation {
 
 impl Simulation {
     pub fn new(config: SimulationConfig) -> Result<Self> {
-        let root_religion = Religion::new(None);
-
         let mut sim = Self {
             religions: SlotMap::with_key(),
             adherents: SlotMap::with_key(),
             rng: SmallRng::seed_from_u64(config.world.seed),
             config,
         };
+
+        let root_religion = Religion::new(None, &mut sim.rng).context("creating new religion")?;
 
         let root_religion_id = sim.religions.insert(root_religion);
 

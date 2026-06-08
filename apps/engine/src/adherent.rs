@@ -108,8 +108,8 @@ impl Adherent {
         false
     }
 
-    /// /// per tick, how should this adherent's heterodoxy change
-    /// /// multiply change base rate by their heterodoxy. in other words, more heterodox ppl are more likely to get more heterodox
+    /// /// /// per tick, how should this adherent's heterodoxy change
+    /// /// /// multiply change base rate by their heterodoxy. in other words, more heterodox ppl are more likely to get more heterodox
     /// fn update_heterodoxy(&mut self, config: &AdherentConfig, rng: &mut SmallRng) {
     ///     // younger ppl more likely to get more heterodox, old ppl more likely to get less heterodox
     ///     let change = self.heterodoxy * config.heterodoxy_change_base_rate;
@@ -147,9 +147,10 @@ impl Adherent {
 
         if self.should_die(config, rng) {
             self.status = AdherentStatus::Dead;
-            // } else { // increment heter
-            //     self.update_heterodoxy(config, rng);
-            // }
         }
+        // } else {
+        //     // increment heter
+        //     self.update_heterodoxy(config, rng);
+        // }
     }
 }

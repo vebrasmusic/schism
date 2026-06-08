@@ -1,17 +1,31 @@
 use std::collections::HashSet;
 
-use crate::adherent::Adherent;
+use anyhow::Result;
+use slotmap::SlotMap;
+
+use crate::adherent::{Adherent, AdherentKey, AdherentStatus};
 use crate::religion::{Religion, ReligionKey};
 
 use super::Simulation;
 
 impl Simulation {
-    pub(super) fn tick(&mut self) {
+    pub(super) fn tick(&mut self) -> Result<()> {
         // snapshot which religions exist before this tick, so the readout can
         // flag any that get born this generation. read-only, doesn't affect sim.
         let religions_at_start: HashSet<ReligionKey> = self.religions.keys().collect();
 
-        let religion_adherents = self.advance_adherents();
+        // get rid of any adherents that died
+        self.adherents
+            .retain(|_, adherent| adherent.status == AdherentStatus::Alive);
+
+        let mean_heterodoxy = self
+            .adherents
+            .iter()
+            .map(|(_, adherent)| adherent.heterodoxy.value())
+            .sum::<f64>()
+            / self.adherents.len() as f64;
+
+        let religion_adherents = self.advance_adherents(mean_heterodoxy)?;
 
         let mut schisms = Vec::new();
 
@@ -19,6 +33,8 @@ impl Simulation {
             if religion.is_extinct() {
                 continue;
             }
+
+            religion.age += self.config.adherent.generation_length_yrs as u32;
 
             let adherent_keys = religion_adherents
                 .get(&religion_id)
@@ -35,7 +51,12 @@ impl Simulation {
                 .map(|adherent_id| &self.adherents[*adherent_id])
                 .collect();
 
-            if religion.should_schism(&adherents, &self.config.religion, &mut self.rng) {
+            if religion.should_schism(
+                &adherents,
+                mean_heterodoxy,
+                &self.config.religion,
+                &mut self.rng,
+            ) {
                 schisms.push((religion_id, adherent_keys));
             }
         }
@@ -51,14 +72,19 @@ impl Simulation {
             for adherent_id in adherents {
                 let adherent = self.adherents.get_mut(*adherent_id).unwrap();
 
-                let converted =
-                    adherent.try_conversion(new_sect_id, &self.config.adherent, &mut self.rng);
-                if converted {
-                    println!("someone converted")
-                }
+                let converted = adherent.try_conversion(
+                    new_sect_id,
+                    self.config.religion.high_heterodoxy_threshold,
+                    &self.config.adherent,
+                    &mut self.rng,
+                );
+                // if converted {
+                //     println!("someone converted")
+                // }
             }
         }
 
-        self.print_generation_readout(&religions_at_start);
+        self.print_generation_readout(&religions_at_start, mean_heterodoxy);
+        Ok(())
     }
 }

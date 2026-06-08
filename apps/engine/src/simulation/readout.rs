@@ -7,7 +7,11 @@ use super::Simulation;
 impl Simulation {
     /// detailed, json-ish dump of the world state at the end of a generation.
     /// purely a readout — touches no simulation state.
-    pub(super) fn print_generation_readout(&self, religions_at_start: &HashSet<ReligionKey>) {
+    pub(super) fn print_generation_readout(
+        &self,
+        religions_at_start: &HashSet<ReligionKey>,
+        mean_population_heterodoxy: f64,
+    ) {
         // tally living adherents per religion, recomputed fresh so it reflects
         // the post-schism / post-conversion state of this generation.
         let mut adherent_counts: HashMap<ReligionKey, usize> = HashMap::new();
@@ -49,7 +53,8 @@ impl Simulation {
         println!("    \"religions\": {total_religions},");
         println!("    \"active\": {active_religions},");
         println!("    \"extinct\": {extinct_religions},");
-        println!("    \"new_this_generation\": {new_religions}");
+        println!("    \"new_this_generation\": {new_religions},");
+        println!("    \"mean_heterodoxy\": {mean_population_heterodoxy}");
         println!("  }},");
         println!("  \"religions\": [");
 

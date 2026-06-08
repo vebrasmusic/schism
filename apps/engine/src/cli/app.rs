@@ -88,8 +88,8 @@ impl Cli {
                     .validate()
                     .context("invalid simulation config")?;
 
-                let mut sim = Simulation::new(simulation_config);
-                sim.run();
+                let mut sim = Simulation::new(simulation_config)?;
+                sim.run()?;
             }
         }
 

@@ -66,13 +66,45 @@ impl Simulation {
     }
 
     pub fn run(&mut self) -> Result<()> {
-        // start loop
+        // progress chatter goes to stderr so stdout carries only the final
+        // readout — that's what lets a caller do `engine run > out.json` and get
+        // a clean end-of-run tree with no log lines mixed in.
+        let mut final_generation_readout = None;
+
         for generation in 0..self.config.world.num_generations {
-            println!("on generation {generation}");
-            self.tick()?;
+            eprintln!("on generation {generation}");
+            final_generation_readout = Some(self.tick()?);
         }
 
-        println!("simulation ended.");
+        eprintln!("simulation ended.");
+
+        // emit the world state once, at the very end, as the json "end tree".
+        // a zero-generation run never ticks, so fall back to the initial world.
+        let final_generation_readout = final_generation_readout.unwrap_or_else(|| {
+            let religions_at_start = self.religions.keys().collect();
+            self.build_generation_readout(&religions_at_start, self.mean_living_heterodoxy())
+        });
+
+        let readout_json = serde_json::to_string_pretty(&final_generation_readout)
+            .context("serializing final generation readout")?;
+        println!("{readout_json}");
+
+        // throwaway (CDK experiment): also ship the readout to S3 when
+        // SCHISM_S3_BUCKET is set. no-op otherwise. delete this line with the
+        // `output` module.
+        crate::output::upload_if_configured(&readout_json)?;
+
         Ok(())
+    }
+
+    /// mean heterodoxy across the living population. the per-tick `retain` drops
+    /// the dead before this is called and the initial population starts alive, so
+    /// every current adherent counts.
+    fn mean_living_heterodoxy(&self) -> f64 {
+        self.adherents
+            .iter()
+            .map(|(_, adherent)| adherent.heterodoxy.value())
+            .sum::<f64>()
+            / self.adherents.len() as f64
     }
 }

@@ -1,0 +1,6 @@
+# keep the build context small and the build reproducible
+target/
+profile.json.gz
+Dockerfile
+.dockerignore
+**/*.swp

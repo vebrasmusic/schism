@@ -7,9 +7,13 @@ use crate::adherent::{Adherent, AdherentKey, AdherentStatus};
 use crate::religion::{Religion, ReligionKey};
 
 use super::Simulation;
+use super::readout::GenerationReadout;
 
 impl Simulation {
-    pub(super) fn tick(&mut self) -> Result<()> {
+    /// advance the world one generation and return the snapshot describing the
+    /// resulting state. the readout is built but not serialized here — the run
+    /// loop keeps the final generation's and emits it once at the end.
+    pub(super) fn tick(&mut self) -> Result<GenerationReadout> {
         // snapshot which religions exist before this tick, so the readout can
         // flag any that get born this generation. read-only, doesn't affect sim.
         let religions_at_start: HashSet<ReligionKey> = self.religions.keys().collect();
@@ -23,12 +27,7 @@ impl Simulation {
         self.adherents
             .retain(|_, adherent| adherent.status == AdherentStatus::Alive);
 
-        let mean_heterodoxy = self
-            .adherents
-            .iter()
-            .map(|(_, adherent)| adherent.heterodoxy.value())
-            .sum::<f64>()
-            / self.adherents.len() as f64;
+        let mean_heterodoxy = self.mean_living_heterodoxy();
 
         let religion_adherents = self.advance_adherents(mean_heterodoxy)?;
 
@@ -87,7 +86,6 @@ impl Simulation {
             }
         }
 
-        self.print_generation_readout(&religions_at_start, mean_heterodoxy);
-        Ok(())
+        Ok(self.build_generation_readout(&religions_at_start, mean_heterodoxy))
     }
 }

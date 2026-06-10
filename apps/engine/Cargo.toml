@@ -14,3 +14,10 @@ slotmap = "1.1.1"
 strum = "0.28.0"
 strum_macros = "0.28.0"
 thiserror = "2.0.18"
+
+# --- throwaway: S3 readout upload for the CDK experiment (src/output.rs) ---
+# Delete this block, `mod output;` in main.rs, and the upload call in
+# simulation::run when the experiment is done.
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1"
+tokio = { version = "1", features = ["rt", "net", "time"] }

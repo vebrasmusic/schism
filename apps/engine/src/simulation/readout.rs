@@ -6,12 +6,15 @@ use crate::religion::ReligionKey;
 
 use super::Simulation;
 
-/// the full world snapshot dumped at the end of a generation. `Serialize` is
-/// what gives us the pretty, one-field-per-line output via `to_string_pretty`.
+/// the full world snapshot for a generation. `Serialize` is what gives us the
+/// pretty, one-field-per-line output via `to_string_pretty`. owns its strings
+/// (rather than borrowing from `Simulation`) so the run loop can hold onto the
+/// final generation's readout after the borrow ends and serialize it once at the
+/// very end of the run.
 #[derive(Serialize)]
-struct GenerationReadout<'a> {
+pub(crate) struct GenerationReadout {
     totals: Totals,
-    religions: Vec<ReligionRow<'a>>,
+    religions: Vec<ReligionRow>,
 }
 
 #[derive(Serialize)]
@@ -25,25 +28,26 @@ struct Totals {
 }
 
 #[derive(Serialize)]
-struct ReligionRow<'a> {
-    name: &'a str,
+struct ReligionRow {
+    name: String,
     adherents: usize,
     status: &'static str,
     founding_date: u32,
     extinction_date: Option<u32>,
     age: u32,
-    parent: &'a str,
+    parent: String,
     new: bool,
 }
 
 impl Simulation {
-    /// detailed json dump of the world state at the end of a generation. purely
-    /// a readout — touches no simulation state.
-    pub(super) fn print_generation_readout(
+    /// build the detailed snapshot of the world state for a generation. purely
+    /// a readout — touches no simulation state. the caller owns the result and
+    /// decides when to serialize it (we only emit json once, at end of run).
+    pub(super) fn build_generation_readout(
         &self,
         religions_at_start: &HashSet<ReligionKey>,
         mean_population_heterodoxy: f64,
-    ) {
+    ) -> GenerationReadout {
         // tally living adherents per religion, recomputed fresh so it reflects
         // the post-schism / post-conversion state of this generation.
         let mut adherent_counts: HashMap<ReligionKey, usize> = HashMap::new();
@@ -71,7 +75,7 @@ impl Simulation {
                     .unwrap_or("none");
 
                 ReligionRow {
-                    name: &religion.name,
+                    name: religion.name.clone(),
                     adherents: living_adherents,
                     status: if religion.is_extinct() {
                         "extinct"
@@ -81,7 +85,7 @@ impl Simulation {
                     founding_date: religion.founding_date,
                     extinction_date: religion.extinction_date(),
                     age: religion.age(self.current_year),
-                    parent: parent_name,
+                    parent: parent_name.to_owned(),
                     new: is_new_this_generation,
                 }
             })
@@ -100,7 +104,7 @@ impl Simulation {
             .count();
         let new_religions = religion_rows.iter().filter(|row| row.new).count();
 
-        let readout = GenerationReadout {
+        GenerationReadout {
             totals: Totals {
                 people: total_people,
                 religions: total_religions,
@@ -110,11 +114,6 @@ impl Simulation {
                 mean_heterodoxy: mean_population_heterodoxy,
             },
             religions: religion_rows,
-        };
-
-        match serde_json::to_string_pretty(&readout) {
-            Ok(json) => println!("{json}"),
-            Err(error) => eprintln!("failed to render generation readout: {error}"),
         }
     }
 }

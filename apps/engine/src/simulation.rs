@@ -17,10 +17,17 @@ mod adherent;
 mod readout;
 mod tick;
 
+pub enum SimulationPhase {
+    Founding,
+    Expansion,
+    MassMovement,
+}
+
 pub struct Simulation {
     religions: SlotMap<ReligionKey, Religion>,
     adherents: SlotMap<AdherentKey, Adherent>,
     config: SimulationConfig,
+    phase: SimulationPhase,
     rng: SmallRng,
     /// world clock in years, counting up from 0; advanced one generation per tick
     current_year: u32,
@@ -32,12 +39,13 @@ impl Simulation {
             religions: SlotMap::with_key(),
             adherents: SlotMap::with_key(),
             rng: SmallRng::seed_from_u64(config.world.seed),
+            phase: SimulationPhase::Founding,
             config,
             current_year: 0,
         };
 
-        let root_religion = Religion::new(None, sim.current_year, &mut sim.rng)
-            .context("creating new religion")?;
+        let root_religion =
+            Religion::new(None, sim.current_year, &mut sim.rng).context("creating new religion")?;
 
         let root_religion_id = sim.religions.insert(root_religion);
 

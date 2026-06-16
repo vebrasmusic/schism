@@ -5,6 +5,7 @@ use slotmap::SlotMap;
 
 use crate::adherent::{Adherent, AdherentKey, AdherentStatus};
 use crate::religion::{Religion, ReligionKey};
+use crate::simulation::SimulationPhase;
 
 use super::Simulation;
 use super::readout::GenerationReadout;
@@ -14,6 +15,12 @@ impl Simulation {
     /// resulting state. the readout is built but not serialized here — the run
     /// loop keeps the final generation's and emits it once at the end.
     pub(super) fn tick(&mut self) -> Result<GenerationReadout> {
+        if let SimulationPhase::Founding = self.phase
+            && self.adherents.len() > 100_000
+        {
+            self.phase = SimulationPhase::Expansion
+        }
+
         // snapshot which religions exist before this tick, so the readout can
         // flag any that get born this generation. read-only, doesn't affect sim.
         let religions_at_start: HashSet<ReligionKey> = self.religions.keys().collect();

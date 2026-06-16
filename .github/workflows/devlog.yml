@@ -1,0 +1,11 @@
+on:
+  push:
+    branches: [main]
+    paths: ["notes/**"]
+
+jobs:
+  draft:
+    uses: vebrasmusic/ad-portfolio-latest/.github/workflows/draft-devlog.yml@main
+    with:
+      notes_path: notes
+    secrets: inherit

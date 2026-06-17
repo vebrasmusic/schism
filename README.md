@@ -1,10 +1,8 @@
 # Schism
 
-Schism is a small Rust simulation for watching religions split, survive, and die out over many generations.
+Schism is a small Rust simulation for watching religions branch, persist, and disappear across long stretches of simulated history.
 
-The motivation is to model religious history as a population system: people are born, die, inherit some level of heterodoxy, and sometimes a faith cracks along that fault line. A schism creates a child religion, but it only matters if enough adherents convert for the new group to survive.
-
-At a high level, the engine runs generation by generation. It updates adherents, checks whether each active religion schisms, moves heterodox adherents into new sects, marks extinct religions, and prints a compact JSON readout of the resulting religious tree.
+The project is an experiment in treating religious change as an emergent population story rather than a fixed timeline. Communities grow, drift, fracture, and sometimes leave descendants that become meaningful traditions of their own. The details will keep changing, but the goal is the same: produce plausible religious family trees from simple rules.
 
 ## Run
 

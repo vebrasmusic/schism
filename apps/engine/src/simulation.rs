@@ -17,17 +17,17 @@ mod adherent;
 mod readout;
 mod tick;
 
-pub enum SimulationPhase {
-    Founding,
-    Expansion,
-    MassMovement,
+pub enum SimulationScale {
+    Individual,
+    Cohort,
+    Aggregate,
 }
 
 pub struct Simulation {
     religions: SlotMap<ReligionKey, Religion>,
     adherents: SlotMap<AdherentKey, Adherent>,
     config: SimulationConfig,
-    phase: SimulationPhase,
+    scale: SimulationScale,
     rng: SmallRng,
     /// world clock in years, counting up from 0; advanced one generation per tick
     current_year: u32,
@@ -39,7 +39,7 @@ impl Simulation {
             religions: SlotMap::with_key(),
             adherents: SlotMap::with_key(),
             rng: SmallRng::seed_from_u64(config.world.seed),
-            phase: SimulationPhase::Founding,
+            scale: SimulationScale::Individual,
             config,
             current_year: 0,
         };
@@ -96,11 +96,6 @@ impl Simulation {
         let readout_json = serde_json::to_string_pretty(&final_generation_readout)
             .context("serializing final generation readout")?;
         println!("{readout_json}");
-
-        // throwaway (CDK experiment): also ship the readout to S3 when
-        // SCHISM_S3_BUCKET is set. no-op otherwise. delete this line with the
-        // `output` module.
-        crate::output::upload_if_configured(&readout_json)?;
 
         Ok(())
     }

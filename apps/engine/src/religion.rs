@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use rand::rngs::SmallRng;
-use slotmap::new_key_type;
+use slotmap::{Key, new_key_type};
+use std::fmt;
 mod naming;
 
 use crate::adherent::Adherent;
@@ -10,6 +11,12 @@ use crate::religion::naming::generate_name;
 
 new_key_type! {
     pub struct ReligionKey;
+}
+
+impl fmt::Display for ReligionKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "religion:{}", self.data().as_ffi())
+    }
 }
 
 /// whether a religion is still followed, and if not, when it died out. the

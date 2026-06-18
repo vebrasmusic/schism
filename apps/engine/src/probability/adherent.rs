@@ -1,14 +1,14 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
-use rand_distr::{Beta, Normal};
+use rand_distr::{Beta, Normal, num_traits::ToPrimitive};
 
 use crate::{adherent::Adherent, config::AdherentConfig};
 
 /// initial spread of starting ages, so the sim doesn't begin with everyone at
 /// age 0. samples are real-valued and unbounded, so the caller rounds and clamps
 /// each draw into a valid living age (`0..max_age_yrs`).
-pub fn create_initial_population_age_distribution(
-    config: &AdherentConfig,
-) -> Result<Normal<f64>> {
+pub fn create_initial_population_age_distribution(config: &AdherentConfig) -> Result<Normal<f64>> {
     let distr = Normal::new(
         config.population_mean_age_yrs.value(),
         config.population_age_spread_yrs.value(),
@@ -27,14 +27,31 @@ pub fn create_initial_population_heterodoxy_distribution(
     )
 }
 
+pub fn bin_adherents(adherents: Vec<&Adherent>, num_bins: usize) -> HashMap<usize, Vec<&Adherent>> {
+    let mut bins: HashMap<usize, Vec<&Adherent>> = HashMap::new();
+
+    for adherent in adherents {
+        // take the decimal het. value, mult. by num bins and round to get nearest int. bin
+        let nearest_bin = (adherent.heterodoxy.value() * num_bins as f64)
+            .round()
+            .to_usize()
+            .unwrap(); // cause we know we round, and it's bounded
+
+        bins.entry(nearest_bin)
+            .and_modify(|v| v.push(adherent))
+            .or_insert(vec![adherent]);
+    }
+
+    bins
+}
+
 /// distr. that describes a new child given their parent and societies attributes
 pub fn create_child_heterodoxy_distribution(
-    parent: &Adherent,
+    parent_mean: f64,
     current_population_mean_heterodoxy: f64,
     config: &AdherentConfig,
 ) -> Result<Beta<f64>> {
-    let mean_child_heterodoxy = config.parental_heterodoxy_influence.value()
-        * parent.heterodoxy.value()
+    let mean_child_heterodoxy = config.parental_heterodoxy_influence.value() * parent_mean
         + (1.0 - config.parental_heterodoxy_influence.value()) * current_population_mean_heterodoxy;
 
     beta_from_mean_concentration(

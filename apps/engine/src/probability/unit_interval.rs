@@ -1,4 +1,4 @@
-use std::ops::{AddAssign, Mul, SubAssign};
+use std::ops::{AddAssign, Div, Mul, SubAssign};
 
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -56,6 +56,14 @@ impl Mul for UnitInterval {
 
     fn mul(self, rhs: Self) -> Self::Output {
         UnitInterval::new(self.0 * rhs.0)
+    }
+}
+
+impl Div<f64> for UnitInterval {
+    type Output = f64;
+
+    fn div(self, rhs: f64) -> Self::Output {
+        self.0 / rhs
     }
 }
 

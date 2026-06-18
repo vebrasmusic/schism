@@ -60,6 +60,10 @@ impl Simulation {
             *adherent_counts.entry(adherent.religion).or_default() += 1;
         }
 
+        if total_people > 75_864_062 {
+            panic!("population {total_people} exceeds 71 million");
+        }
+
         // one row per religion, newest foundings on top so the freshest sects
         // scan first; biggest congregation breaks ties within a founding cohort.
         let mut religion_rows: Vec<ReligionRow> = self

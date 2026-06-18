@@ -4,8 +4,9 @@ use anyhow::Result;
 use slotmap::SlotMap;
 
 use crate::adherent::{Adherent, AdherentKey, AdherentStatus};
+use crate::probability::bin_adherents;
 use crate::religion::{Religion, ReligionKey};
-use crate::simulation::SimulationPhase;
+use crate::simulation::SimulationScale;
 
 use super::Simulation;
 use super::readout::GenerationReadout;
@@ -15,10 +16,14 @@ impl Simulation {
     /// resulting state. the readout is built but not serialized here — the run
     /// loop keeps the final generation's and emits it once at the end.
     pub(super) fn tick(&mut self) -> Result<GenerationReadout> {
-        if let SimulationPhase::Founding = self.phase
-            && self.adherents.len() > 100_000
-        {
-            self.phase = SimulationPhase::Expansion
+        match self.scale {
+            SimulationScale::Individual => {
+                if self.adherents.len() > self.config.world.cohort_scale_threshold {
+                    self.scale = SimulationScale::Cohort;
+                }
+            }
+            SimulationScale::Cohort => {}
+            SimulationScale::Aggregate => {}
         }
 
         // snapshot which religions exist before this tick, so the readout can
@@ -81,15 +86,12 @@ impl Simulation {
             for adherent_id in adherents {
                 let adherent = self.adherents.get_mut(*adherent_id).unwrap();
 
-                let converted = adherent.try_conversion(
+                adherent.try_conversion(
                     new_sect_id,
                     self.config.religion.high_heterodoxy_threshold,
                     &self.config.adherent,
                     &mut self.rng,
                 );
-                // if converted {
-                //     println!("someone converted")
-                // }
             }
         }
 

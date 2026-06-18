@@ -33,6 +33,13 @@ pub struct WorldConfig {
 
     /// rng seed — fix this to reproduce / compare runs
     pub seed: u64,
+
+    /// living-adherent count at which the sim switches from Individual to Cohort
+    /// scale; beyond this the population is too large to track one-by-one
+    pub cohort_scale_threshold: usize,
+
+    /// number of heterodoxy buckets used when collapsing adherents into cohorts
+    pub cohort_heterodoxy_bins: usize,
 }
 
 /// Per-adherent lifecycle rates.
@@ -238,6 +245,8 @@ impl Default for WorldConfig {
             num_generations: 150,
             starting_population: 500,
             seed: 67,
+            cohort_scale_threshold: 1_000_000,
+            cohort_heterodoxy_bins: 100,
         }
     }
 }

@@ -1,12 +1,8 @@
-use std::any;
-
-use anyhow::{Context, Result};
 use rand::rngs::SmallRng;
-use rand_distr::{Beta, Distribution};
 use slotmap::new_key_type;
 
 use crate::config::AdherentConfig;
-use crate::probability::{UnitInterval, create_child_heterodoxy_distribution, flip_weighted_coin};
+use crate::probability::{UnitInterval, flip_weighted_coin};
 use crate::religion::ReligionKey;
 
 new_key_type! {
@@ -34,30 +30,6 @@ pub struct Adherent {
 }
 
 impl Adherent {
-    pub fn try_birth(
-        &self,
-        population_mean_heterodoxy: f64,
-        config: &AdherentConfig,
-        rng: &mut SmallRng,
-    ) -> Result<Option<Adherent>> {
-        if self.status == AdherentStatus::Dead {
-            return Ok(None);
-        }
-
-        let birth_rate = config.birth_rate(self.age);
-
-        if !flip_weighted_coin(birth_rate, rng) {
-            return Ok(None);
-        }
-
-        let distr = create_child_heterodoxy_distribution(self, population_mean_heterodoxy, config)
-            .context("tried creating child het distr")?;
-
-        let heterodoxy = UnitInterval::new(distr.sample(rng));
-
-        Ok(Some(Adherent::new(self.religion, heterodoxy, None)))
-    }
-
     /// takes in religion and the distr. descrbing new adherent's hterorodxy.
     /// for children, would be the child one, otherwise the pop. level one.
     /// `age` is optional — newborns pass `None` (age 0); the initial population
@@ -107,19 +79,6 @@ impl Adherent {
 
         false
     }
-
-    /// /// /// per tick, how should this adherent's heterodoxy change
-    /// /// /// multiply change base rate by their heterodoxy. in other words, more heterodox ppl are more likely to get more heterodox
-    /// fn update_heterodoxy(&mut self, config: &AdherentConfig, rng: &mut SmallRng) {
-    ///     // younger ppl more likely to get more heterodox, old ppl more likely to get less heterodox
-    ///     let change = self.heterodoxy * config.heterodoxy_change_base_rate;
-    ///
-    ///     if flip_weighted_coin(self.heterodoxy, rng) {
-    ///         self.heterodoxy += change;
-    ///     } else {
-    ///         self.heterodoxy -= change;
-    ///     }
-    /// }
 
     fn should_die(&mut self, config: &AdherentConfig, rng: &mut SmallRng) -> bool {
         // hard cap: at or beyond `max_age_yrs`, survival is treated as

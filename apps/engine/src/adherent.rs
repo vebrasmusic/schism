@@ -9,13 +9,14 @@ new_key_type! {
     pub struct AdherentKey;
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AdherentStatus {
     Dead,
     Alive,
 }
 
 /// bare minimum container representing adherent of a faith. can add more fields later
+#[derive(Debug)]
 pub struct Adherent {
     /// likelihood / tendancy for this person to question current religion
     pub heterodoxy: UnitInterval,

@@ -27,19 +27,24 @@ pub fn create_initial_population_heterodoxy_distribution(
     )
 }
 
-pub fn bin_adherents(adherents: Vec<&Adherent>, num_bins: usize) -> HashMap<usize, Vec<&Adherent>> {
-    let mut bins: HashMap<usize, Vec<&Adherent>> = HashMap::new();
+pub fn bin_adherents(adherents: Vec<&Adherent>, num_bins: usize) -> Vec<Vec<&Adherent>> {
+    // 1 extra bc we can't use 0
+    let mut bins: Vec<Vec<&Adherent>> = vec![vec![]; num_bins + 1];
 
     for adherent in adherents {
-        // take the decimal het. value, mult. by num bins and round to get nearest int. bin
+        // take the decimal het. value, mult. by num bins and round to get nearest int. bin. use
+        // that as the index of array
         let nearest_bin = (adherent.heterodoxy.value() * num_bins as f64)
             .round()
             .to_usize()
             .unwrap(); // cause we know we round, and it's bounded
 
-        bins.entry(nearest_bin)
-            .and_modify(|v| v.push(adherent))
-            .or_insert(vec![adherent]);
+        let bin = bins.get_mut(nearest_bin);
+
+        match bin {
+            Some(v) => v.push(adherent),
+            None => bins.insert(nearest_bin, vec![adherent]),
+        }
     }
 
     bins

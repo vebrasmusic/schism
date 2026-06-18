@@ -1,5 +1,7 @@
+use core::panic;
 use std::collections::HashMap;
 
+use ahash::RandomState;
 use anyhow::{Context, Result};
 use rand_distr::Distribution;
 use rand_distr::num_traits::ToPrimitive;
@@ -45,23 +47,31 @@ impl Simulation {
                 .push(adherent_id)
         }
 
-        let adherents: Vec<&Adherent> = self
+        let living_adherents: Vec<&Adherent> = self
             .adherents
             .iter()
             .filter(|(_, a)| a.status == AdherentStatus::Alive)
             .map(|(_, a)| a)
             .collect();
 
-        let bins = bin_adherents(adherents, self.config.world.cohort_heterodoxy_bins);
+        let bins = bin_adherents(living_adherents, self.config.world.cohort_heterodoxy_bins);
 
         // for each bin, figure out len and average age > average birth rate
-        for (bin, adherents) in bins {
-            let num_adherents_in_bin = adherents.len();
+        // start at 1!!!
+        for i in 1..bins.len() {
+            let bin = bins.get(i).unwrap();
+            let num_adherents_in_bin = bin.len();
 
-            let mut religion_totals_map: HashMap<ReligionKey, u64> = HashMap::new();
+            // skip empty bins
+            if num_adherents_in_bin == 0 {
+                continue;
+            }
+
+            let mut religion_totals_map: HashMap<ReligionKey, u64, RandomState> =
+                HashMap::default();
 
             // TODO: try doing a weighted average instead at some poimt
-            for adherent in &adherents {
+            for adherent in bin {
                 religion_totals_map
                     .entry(adherent.religion)
                     .and_modify(|v| *v += 1)
@@ -72,7 +82,7 @@ impl Simulation {
 
             // for loop thru each adherent in bin, gather if they birthed a kid
             // by filtering for how many came back true
-            let num_children_born: usize = adherents
+            let num_children_born: usize = bin
                 .iter()
                 .filter(|a| {
                     flip_weighted_coin(self.config.adherent.birth_rate(a.age), &mut self.rng)
@@ -85,7 +95,7 @@ impl Simulation {
             }
 
             // create distr. for heterodoxy vals
-            let bin_mean_heterodoxy = bin as f64 / self.config.world.cohort_heterodoxy_bins as f64;
+            let bin_mean_heterodoxy = i as f64 / self.config.world.cohort_heterodoxy_bins as f64;
 
             let distr = create_child_heterodoxy_distribution(
                 bin_mean_heterodoxy,
@@ -95,6 +105,13 @@ impl Simulation {
             .context("error creating beta distribution for child heterodoxy")?;
 
             // TODO: if slow, can ignore per bin religion splits and just do one population wide calc.
+            let mut heterodoxies_per_birth: Vec<f64> = distr
+                .sample_iter(&mut self.rng)
+                .take(num_children_born)
+                .collect();
+
+            let mut allocated_religion_births = 0;
+
             for (religion, num_adherents) in religion_totals_map {
                 let percentage = num_adherents as f64 / num_adherents_in_bin as f64;
 
@@ -104,22 +121,30 @@ impl Simulation {
 
                 // println!("percentage {}", percentage);
                 let num_births_in_religion = (percentage * num_children_born as f64)
-                    .ceil()
-                    .to_u64()
+                    .floor()
+                    .to_usize()
                     .unwrap();
+
+                if num_births_in_religion == 0 {
+                    continue;
+                }
 
                 // println!(
                 //     "num births in religion {}: {}",
                 //     religion, num_births_in_religion
                 // );
 
-                for _ in 0..num_births_in_religion {
-                    births.push(Adherent::new(
-                        religion,
-                        UnitInterval::new(distr.sample(&mut self.rng)),
-                        Some(0),
-                    ));
+                for i in 0..num_births_in_religion {
+                    let heterodoxy = UnitInterval::new(
+                        *heterodoxies_per_birth
+                            .get(i)
+                            .expect("no heterodoxies_per_birth entry at this"),
+                    );
+                    births.push(Adherent::new(religion, heterodoxy, Some(0)));
                 }
+
+                //remove num births hterodoxy entries
+                heterodoxies_per_birth.drain(..num_births_in_religion);
             }
         }
 

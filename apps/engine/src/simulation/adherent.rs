@@ -110,8 +110,6 @@ impl Simulation {
                 .take(num_children_born)
                 .collect();
 
-            let mut allocated_religion_births = 0;
-
             for (religion, num_adherents) in religion_totals_map {
                 let percentage = num_adherents as f64 / num_adherents_in_bin as f64;
 

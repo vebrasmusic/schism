@@ -1,15 +1,10 @@
-use std::collections::HashSet;
-
-use anyhow::Result;
-use slotmap::SlotMap;
-
-use crate::adherent::{Adherent, AdherentKey, AdherentStatus};
-use crate::probability::bin_adherents;
-use crate::religion::{Religion, ReligionKey};
-use crate::simulation::SimulationScale;
-
 use super::Simulation;
 use super::readout::GenerationReadout;
+use crate::adherent::{Adherent, AdherentStatus};
+use crate::religion::{Religion, ReligionKey};
+use crate::simulation::SimulationScale;
+use anyhow::Result;
+use std::collections::HashSet;
 
 impl Simulation {
     /// advance the world one generation and return the snapshot describing the
@@ -18,7 +13,7 @@ impl Simulation {
     pub(super) fn tick(&mut self) -> Result<GenerationReadout> {
         match self.scale {
             SimulationScale::Individual => {
-                if self.adherents.len() > self.config.world.cohort_scale_threshold {
+                if self.total_population() > self.config.world.cohort_scale_threshold as u64 {
                     self.scale = SimulationScale::Cohort;
                 }
             }
@@ -36,8 +31,6 @@ impl Simulation {
         let current_year = self.current_year;
 
         // get rid of any adherents that died
-        self.adherents
-            .retain(|_, adherent| adherent.status == AdherentStatus::Alive);
 
         let mean_heterodoxy = self.mean_living_heterodoxy();
 

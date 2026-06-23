@@ -83,6 +83,12 @@ pub struct AdherentConfig {
     /// base per-tick heterodoxy drift, scaled by heterodoxy
     pub heterodoxy_change_base_rate: UnitInterval,
 
+    /// number of heterodoxy buckets in the population histogram
+    pub num_heterodoxy_bins: usize,
+
+    /// number of age buckets in the population histogram
+    pub num_age_bins: usize,
+
     /// chance of death per tick below `max_age_yrs`, looked up by age band
     pub mortality: Vec<AgeBand>,
 
@@ -305,6 +311,8 @@ impl Default for AdherentConfig {
             population_age_spread_yrs: PositiveReal::new(15.0),
             parental_heterodoxy_influence: UnitInterval::new(0.6),
             child_heterodoxy_concentration: PositiveReal::new(30.0),
+            num_heterodoxy_bins: 500,
+            num_age_bins: 500,
             conversion_base_rate: UnitInterval::new(0.7),
             heterodoxy_change_base_rate: UnitInterval::new(0.01),
             // per-GENERATION (20-yr) probabilities, converted from the old

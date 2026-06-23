@@ -6,6 +6,7 @@ mod naming;
 
 use crate::adherent::Adherent;
 use crate::config::ReligionConfig;
+use crate::histogram::{AgeBin, HeterodoxyBin, PopulationHistogram};
 use crate::probability::{UnitInterval, flip_weighted_coin};
 use crate::religion::naming::generate_name;
 
@@ -39,6 +40,9 @@ pub struct Religion {
 
     /// parent religion node
     pub parent: Option<ReligionKey>,
+
+    /// new population histogram of adherents to this faith
+    pub adherents: PopulationHistogram,
 }
 
 impl Religion {
@@ -46,6 +50,7 @@ impl Religion {
         parent: Option<(&Religion, ReligionKey)>,
         founding_date: u32,
         rng: &mut SmallRng,
+        adherents: PopulationHistogram,
     ) -> Result<Self> {
         let result = match parent {
             None => Self {
@@ -53,12 +58,14 @@ impl Religion {
                 founding_date,
                 status: ReligionStatus::Active,
                 parent: None,
+                adherents,
             },
             Some((parent, parent_id)) => Self {
                 name: generate_name(Some(&parent.name), rng),
                 founding_date,
                 status: ReligionStatus::Active,
                 parent: Some(parent_id),
+                adherents: todo!("migrate some adherents to new religion"),
             },
         };
 
@@ -96,6 +103,10 @@ impl Religion {
 
     pub fn mark_extinct(&mut self, extinction_date: u32) {
         self.status = ReligionStatus::Extinct(extinction_date)
+    }
+
+    pub fn total_population(&self) -> u64 {
+        self.adherents.total()
     }
 
     pub fn is_extinct(&self) -> bool {

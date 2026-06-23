@@ -6,6 +6,7 @@ use slotmap::SlotMap;
 use crate::{
     adherent::{Adherent, AdherentKey},
     config::SimulationConfig,
+    histogram::PopulationHistogram,
     probability::{
         UnitInterval, create_initial_population_age_distribution,
         create_initial_population_heterodoxy_distribution,
@@ -25,7 +26,6 @@ pub enum SimulationScale {
 
 pub struct Simulation {
     religions: SlotMap<ReligionKey, Religion>,
-    adherents: SlotMap<AdherentKey, Adherent>,
     config: SimulationConfig,
     scale: SimulationScale,
     rng: SmallRng,
@@ -37,20 +37,22 @@ impl Simulation {
     pub fn new(config: SimulationConfig) -> Result<Self> {
         let mut sim = Self {
             religions: SlotMap::with_key(),
-            adherents: SlotMap::with_key(),
             rng: SmallRng::seed_from_u64(config.world.seed),
             scale: SimulationScale::Individual,
             config,
             current_year: 0,
         };
 
-        let root_religion =
-            Religion::new(None, sim.current_year, &mut sim.rng).context("creating new religion")?;
-
-        let root_religion_id = sim.religions.insert(root_religion);
+        // set this up as a separate func
+        // ok to do this one by one bc we start w/ a small pop.
+        let mut root_adherents = PopulationHistogram::new(
+            sim.config.adherent.num_heterodoxy_bins,
+            sim.config.adherent.num_age_bins,
+        );
 
         let population_heterodoxy_distr =
             create_initial_population_heterodoxy_distribution(&sim.config.adherent)?;
+
         let population_age_distr =
             create_initial_population_age_distribution(&sim.config.adherent)?;
 
@@ -64,13 +66,27 @@ impl Simulation {
             let heterodoxy = UnitInterval::new(population_heterodoxy_distr.sample(&mut sim.rng));
 
             let sampled_age = population_age_distr.sample(&mut sim.rng);
-            let age = sampled_age.round().clamp(0.0, oldest_starting_age as f64) as u8;
+            let age = sampled_age.round().clamp(0.0, oldest_starting_age as f64) as usize;
 
-            sim.adherents
-                .insert(Adherent::new(root_religion_id, heterodoxy, Some(age)));
+            // bin this adherent, add to histogram
+            root_adherents.bin(
+                heterodoxy.value(),
+                age,
+                sim.config.adherent.num_heterodoxy_bins,
+                sim.config.adherent.num_age_bins,
+            )?;
         }
 
+        let root_religion = Religion::new(None, sim.current_year, &mut sim.rng, root_adherents)
+            .context("creating new religion")?;
+
+        let _ = sim.religions.insert(root_religion);
+
         Ok(sim)
+    }
+
+    pub fn total_population(&self) -> u64 {
+        self.religions.values().map(|r| r.total_population()).sum()
     }
 
     pub fn run(&mut self) -> Result<()> {
@@ -98,16 +114,5 @@ impl Simulation {
         println!("{readout_json}");
 
         Ok(())
-    }
-
-    /// mean heterodoxy across the living population. the per-tick `retain` drops
-    /// the dead before this is called and the initial population starts alive, so
-    /// every current adherent counts.
-    fn mean_living_heterodoxy(&self) -> f64 {
-        self.adherents
-            .iter()
-            .map(|(_, adherent)| adherent.heterodoxy.value())
-            .sum::<f64>()
-            / self.adherents.len() as f64
     }
 }

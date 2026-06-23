@@ -15,6 +15,12 @@ use crate::religion::ReligionKey;
 use super::Simulation;
 
 impl Simulation {
+    /// per religion, calculate how many of each vin die and decrement
+    pub(super) fn remove_dead(&mut self) {
+        // calc. how many die per age bin
+        // well isn't this just going to be
+    }
+
     /// age + update every living adherent, birth any children, and group the
     /// survivors by religion. returns the religion -> living adherents map the
     /// schism pass consumes.

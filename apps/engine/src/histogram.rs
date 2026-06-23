@@ -123,22 +123,66 @@ impl PopulationHistogram {
 
     pub fn new(num_heterodoxy_bins: usize, num_age_bins: usize) -> Self {
         PopulationHistogram {
-            counts: vec![vec![Count(0); num_age_bins + 1]; num_heterodoxy_bins + 1],
+            counts: vec![vec![Count(0); num_heterodoxy_bins + 1]; num_age_bins + 1],
         }
     }
 
     pub fn get_count(&self, cell: HistogramCell) -> Result<&Count, HistogramError> {
         self.counts
-            .get(cell.heterodoxy_bin.value())
-            .and_then(|row| row.get(cell.age_bin.value()))
+            .get(cell.age_bin.value())
+            .and_then(|row| row.get(cell.heterodoxy_bin.value()))
             .ok_or(HistogramError::CellNotFound(cell))
     }
 
     pub fn get_mut_count(&mut self, cell: HistogramCell) -> Result<&mut Count, HistogramError> {
         self.counts
-            .get_mut(cell.heterodoxy_bin.value())
-            .and_then(|row| row.get_mut(cell.age_bin.value()))
+            .get_mut(cell.age_bin.value())
+            .and_then(|row| row.get_mut(cell.heterodoxy_bin.value()))
             .ok_or(HistogramError::CellNotFound(cell))
+    }
+
+    /// All heterodoxy bins for a given age band.
+    pub fn row(&self, age_bin: AgeBin) -> Result<&[Count], HistogramError> {
+        self.counts
+            .get(age_bin.value())
+            .map(Vec::as_slice)
+            .ok_or_else(|| HistogramError::CellNotFound(HistogramCell {
+                age_bin,
+                heterodoxy_bin: HeterodoxyBin(0),
+            }))
+    }
+
+    pub fn row_mut(&mut self, age_bin: AgeBin) -> Result<&mut [Count], HistogramError> {
+        self.counts
+            .get_mut(age_bin.value())
+            .map(Vec::as_mut_slice)
+            .ok_or_else(|| HistogramError::CellNotFound(HistogramCell {
+                age_bin,
+                heterodoxy_bin: HeterodoxyBin(0),
+            }))
+    }
+
+    /// All age bins for a given heterodoxy bin.
+    pub fn col(&self, het_bin: HeterodoxyBin) -> Result<impl Iterator<Item = &Count>, HistogramError> {
+        let idx = het_bin.value();
+        if self.counts.first().map_or(true, |row| idx >= row.len()) {
+            return Err(HistogramError::CellNotFound(HistogramCell {
+                age_bin: AgeBin(0),
+                heterodoxy_bin: het_bin,
+            }));
+        }
+        Ok(self.counts.iter().map(move |row| &row[idx]))
+    }
+
+    pub fn col_mut(&mut self, het_bin: HeterodoxyBin) -> Result<impl Iterator<Item = &mut Count> + '_, HistogramError> {
+        let idx = het_bin.value();
+        if self.counts.first().map_or(true, |row| idx >= row.len()) {
+            return Err(HistogramError::CellNotFound(HistogramCell {
+                age_bin: AgeBin(0),
+                heterodoxy_bin: het_bin,
+            }));
+        }
+        Ok(self.counts.iter_mut().map(move |row| &mut row[idx]))
     }
 
     pub fn adjust(&mut self, cell: HistogramCell, delta: i64) -> Result<i64, HistogramError> {
@@ -159,12 +203,12 @@ impl PopulationHistogram {
 impl std::fmt::Display for PopulationHistogram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (i, row) in self.counts.iter().enumerate() {
-            write!(f, "HeterodoxyBin {}: [", i)?;
+            write!(f, "AgeBin {}: [", i)?;
             for (j, count) in row.iter().enumerate() {
                 if j > 0 {
                     write!(f, ", ")?;
                 }
-                write!(f, "AgeBin {}: {}", j, count.value())?;
+                write!(f, "HeterodoxyBin {}: {}", j, count.value())?;
             }
             writeln!(f, "]")?;
         }

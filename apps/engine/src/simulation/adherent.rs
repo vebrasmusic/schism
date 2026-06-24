@@ -16,11 +16,20 @@ use crate::religion::ReligionKey;
 use super::Simulation;
 
 impl Simulation {
-    /// per religion, calculate how many of each bin die and decrement
-    pub(super) fn remove_dead(&mut self) -> Result<()> {
+    /// per religion, calculate how many of each bin die and decrement.
+    /// `total_population` is the world's living count at the start of the tick;
+    /// mortality is scaled by how crowded the environment is relative to its
+    /// carrying capacity, so growth bends into an S-curve instead of exploding.
+    pub(super) fn remove_dead(&mut self, total_population: u64) -> Result<()> {
+        // density-dependent multiplier on mortality: 1.0 when the population
+        // exactly fills the environment's carrying capacity, below 1.0 while
+        // there's room to grow, and above 1.0 once it's overcrowded.
+        let crowding_factor =
+            total_population as f64 / self.config.environment.carrying_capacity as f64;
+
         for (_, religion) in &mut self.religions {
             for (age_band, age_band_vector) in religion.adherents.iter_bands_mut() {
-                let mortality = self
+                let base_mortality = self
                     .config
                     .adherent
                     .mortality_rate(age_band.get_age(
@@ -28,6 +37,10 @@ impl Simulation {
                         self.config.adherent.max_age_yrs,
                     ) as u8)
                     .value();
+
+                // clamp: crowding can push the scaled rate past 1.0, but a
+                // probability can't exceed 1 (everyone in the bin dies).
+                let mortality = (base_mortality * crowding_factor).clamp(0.0, 1.0);
 
                 for (_, count) in age_band_vector {
                     let num_dead = Binomial::new(count.value(), mortality)?.sample(&mut self.rng);

@@ -34,7 +34,12 @@ pub struct Simulation {
 }
 
 impl Simulation {
-    pub fn new(config: SimulationConfig) -> Result<Self> {
+    pub fn new(mut config: SimulationConfig) -> Result<Self> {
+        // resolve the chosen environment's tunables (carrying capacity, ...) and
+        // fold them into the config so the rest of the engine reads them off
+        // `self.config.environment`, same as the other sub-configs.
+        config.environment = config.world.environment.config();
+
         let mut sim = Self {
             religions: SlotMap::with_key(),
             rng: SmallRng::seed_from_u64(config.world.seed),

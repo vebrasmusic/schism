@@ -36,7 +36,7 @@ struct ReligionRow {
     status: &'static str,
     founding_date: u32,
     extinction_date: Option<u32>,
-    age: u32,
+    age: String,
     parent: String,
     new: bool,
 }
@@ -106,7 +106,7 @@ impl Simulation {
                     },
                     founding_date: religion.founding_date,
                     extinction_date: religion.extinction_date(),
-                    age: religion.age(self.current_year),
+                    age: fmt_count(religion.age(self.current_year) as usize),
                     parent: parent_name.to_owned(),
                     new: is_new_this_generation,
                 }

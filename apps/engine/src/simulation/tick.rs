@@ -28,8 +28,12 @@ impl Simulation {
         // stamped with this year, and any that die are stamped extinct with it.
         self.current_year += self.config.adherent.generation_length_yrs as u32;
 
+        // total living population at the start of the tick, before anyone dies
+        // or is born — drives the density-dependent mortality in remove_dead.
+        let population_at_tick_start = self.total_population();
+
         // get rid of any adherents that died
-        self.remove_dead()?;
+        self.remove_dead(population_at_tick_start)?;
 
         // advance ages
         self.increment_age()?;

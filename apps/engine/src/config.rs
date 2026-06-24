@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::environment::Environment;
+use crate::environment::{Environment, EnvironmentConfig};
 use crate::probability::{PositiveReal, UnitInterval};
 
 /// Central control board for every tunable in the simulation.
@@ -16,6 +16,12 @@ pub struct SimulationConfig {
     pub world: WorldConfig,
     pub adherent: AdherentConfig,
     pub religion: ReligionConfig,
+
+    /// resolved from `world.environment` at `Simulation::new` time, not from
+    /// JSON — hence `serde(skip)`. holds the carrying capacity et al. for the
+    /// chosen environment.
+    #[serde(skip)]
+    pub environment: EnvironmentConfig,
 }
 
 /// Top-level run settings: where, how long, how big, and the rng seed.

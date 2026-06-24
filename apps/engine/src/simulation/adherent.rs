@@ -3,10 +3,11 @@ use std::collections::HashMap;
 
 use ahash::RandomState;
 use anyhow::{Context, Result};
-use rand_distr::Distribution;
 use rand_distr::num_traits::ToPrimitive;
+use rand_distr::{Binomial, Distribution};
 
 use crate::adherent::{Adherent, AdherentKey, AdherentStatus};
+use crate::histogram::{AgeBand, Count, HeterodoxyBin, PopulationHistogram};
 use crate::probability::{
     UnitInterval, bin_adherents, create_child_heterodoxy_distribution, flip_weighted_coin,
 };
@@ -15,147 +16,101 @@ use crate::religion::ReligionKey;
 use super::Simulation;
 
 impl Simulation {
-    /// per religion, calculate how many of each vin die and decrement
-    pub(super) fn remove_dead(&mut self) {
-        // calc. how many die per age bin
-        // well isn't this just going to be
+    /// per religion, calculate how many of each bin die and decrement
+    pub(super) fn remove_dead(&mut self) -> Result<()> {
+        for (_, religion) in &mut self.religions {
+            for (age_band, age_band_vector) in religion.adherents.iter_bands_mut() {
+                let mortality = self
+                    .config
+                    .adherent
+                    .mortality_rate(age_band.get_age(
+                        self.config.adherent.num_age_bins,
+                        self.config.adherent.max_age_yrs,
+                    ) as u8)
+                    .value();
+
+                for (_, count) in age_band_vector {
+                    let num_dead = Binomial::new(count.value(), mortality)?.sample(&mut self.rng);
+
+                    // make sure i subtract the num dead here
+                    count.adjust(-(num_dead as i64)).with_context(|| {
+                        format!(
+                            "remove_dead: subtracting {num_dead} dead from count={}",
+                            count.value()
+                        )
+                    })?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
-    /// age + update every living adherent, birth any children, and group the
-    /// survivors by religion. returns the religion -> living adherents map the
-    /// schism pass consumes.
-    pub(super) fn advance_adherents(
-        &mut self,
-        population_mean_heterodoxy: f64,
-    ) -> Result<HashMap<ReligionKey, Vec<AdherentKey>>> {
-        let mut births: Vec<Adherent> = Vec::new();
+    /// age everyone up by one generation. a tick is `generation_length_yrs` long,
+    /// so people advance `generation_length_yrs / years_per_band` age bands, where
+    /// `years_per_band = max_age / num_age_bins`. we prepend that many empty
+    /// youngest bands (band 0 is refilled by the birth step) to shift everyone up,
+    /// then truncate back to the original band count so whoever aged past the top
+    /// is dropped.
+    pub(super) fn increment_age(&mut self) -> Result<()> {
+        let years_per_band =
+            self.config.adherent.max_age_yrs as usize / self.config.adherent.num_age_bins;
+        let bands_to_advance =
+            self.config.adherent.generation_length_yrs as usize / years_per_band;
+        let heterodoxy_row_width = self.config.adherent.num_heterodoxy_bins + 1;
 
-        // make map of religion id > vec adherents
-        let mut religion_adherents: HashMap<ReligionKey, Vec<AdherentKey>> = HashMap::new();
+        for (_, religion) in &mut self.religions {
+            let old_counts = religion.adherents.take_counts();
+            let original_length = old_counts.len();
 
-        for (adherent_id, adherent) in &mut self.adherents {
-            // check if they were alrady dead, then don't update
-            if adherent.is_dead() {
-                continue;
-            }
+            // shift everyone up by prepending `bands_to_advance` empty youngest
+            // bands, then push all the existing bands on after them...
+            let mut new_counts = vec![vec![Count(0); heterodoxy_row_width]; bands_to_advance];
+            new_counts.extend(old_counts);
 
-            // do update on adherents
-            adherent.update(&self.config.adherent, &mut self.rng);
+            // ...then drop the bands that aged past the top, restoring the
+            // original band count.
+            new_counts.truncate(original_length);
 
-            // exclude perosn that just died
-            if adherent.is_dead() {
-                continue;
-            }
-
-            religion_adherents
-                .entry(adherent.religion)
-                .or_default()
-                .push(adherent_id)
+            religion.adherents.swap_counts(new_counts);
         }
 
-        let living_adherents: Vec<&Adherent> = self
-            .adherents
-            .iter()
-            .filter(|(_, a)| a.status == AdherentStatus::Alive)
-            .map(|(_, a)| a)
-            .collect();
+        Ok(())
+    }
 
-        let bins = bin_adherents(living_adherents, self.config.world.cohort_heterodoxy_bins);
+    pub(super) fn add_births(&mut self) -> Result<()> {
+        for (_, religion) in &mut self.religions {
+            let mut birth_counts_per_heterodoxy_bin: Vec<u64> =
+                vec![0; self.config.adherent.num_heterodoxy_bins + 1];
 
-        // for each bin, figure out len and average age > average birth rate
-        // start at 1!!!
-        for i in 1..bins.len() {
-            let bin = bins.get(i).unwrap();
-            let num_adherents_in_bin = bin.len();
+            for (age_band, age_band_vector) in religion.adherents.iter_bands() {
+                let birth_rate = self
+                    .config
+                    .adherent
+                    .birth_rate(age_band.get_age(
+                        self.config.adherent.num_age_bins,
+                        self.config.adherent.max_age_yrs,
+                    ) as u8)
+                    .value();
 
-            // skip empty bins
-            if num_adherents_in_bin == 0 {
-                continue;
-            }
+                for (heterodoxy_bin, count) in age_band_vector {
+                    let num_born = Binomial::new(count.value(), birth_rate)?.sample(&mut self.rng);
 
-            let mut religion_totals_map: HashMap<ReligionKey, u64, RandomState> =
-                HashMap::default();
-
-            // TODO: try doing a weighted average instead at some poimt
-            for adherent in bin {
-                religion_totals_map
-                    .entry(adherent.religion)
-                    .and_modify(|v| *v += 1)
-                    .or_insert(1);
-            }
-
-            // println!("religion_totals_map: {:?}", religion_totals_map);
-
-            // for loop thru each adherent in bin, gather if they birthed a kid
-            // by filtering for how many came back true
-            let num_children_born: usize = bin
-                .iter()
-                .filter(|a| {
-                    flip_weighted_coin(self.config.adherent.birth_rate(a.age), &mut self.rng)
-                })
-                .count();
-
-            // if no children born, we can just skip the rest here
-            if num_children_born == 0 {
-                continue;
-            }
-
-            // create distr. for heterodoxy vals
-            let bin_mean_heterodoxy = i as f64 / self.config.world.cohort_heterodoxy_bins as f64;
-
-            let distr = create_child_heterodoxy_distribution(
-                bin_mean_heterodoxy,
-                population_mean_heterodoxy,
-                &self.config.adherent,
-            )
-            .context("error creating beta distribution for child heterodoxy")?;
-
-            // TODO: if slow, can ignore per bin religion splits and just do one population wide calc.
-            let mut heterodoxies_per_birth: Vec<f64> = distr
-                .sample_iter(&mut self.rng)
-                .take(num_children_born)
-                .collect();
-
-            for (religion, num_adherents) in religion_totals_map {
-                let percentage = num_adherents as f64 / num_adherents_in_bin as f64;
-
-                if percentage > 1.0 {
-                    panic!("percentage greater than 1");
+                    birth_counts_per_heterodoxy_bin[heterodoxy_bin.value()] += num_born;
                 }
+            }
 
-                // println!("percentage {}", percentage);
-                let num_births_in_religion = (percentage * num_children_born as f64)
-                    .floor()
-                    .to_usize()
-                    .unwrap();
-
-                if num_births_in_religion == 0 {
+            for (bin, count) in birth_counts_per_heterodoxy_bin.iter().enumerate() {
+                if *count == 0 {
                     continue;
                 }
-
-                // println!(
-                //     "num births in religion {}: {}",
-                //     religion, num_births_in_religion
-                // );
-
-                for i in 0..num_births_in_religion {
-                    let heterodoxy = UnitInterval::new(
-                        *heterodoxies_per_birth
-                            .get(i)
-                            .expect("no heterodoxies_per_birth entry at this"),
-                    );
-                    births.push(Adherent::new(religion, heterodoxy, Some(0)));
-                }
-
-                //remove num births hterodoxy entries
-                heterodoxies_per_birth.drain(..num_births_in_religion);
+                religion
+                    .adherents
+                    .adjust(AgeBand::from(0), HeterodoxyBin::from(bin), *count as i64)
+                    .with_context(|| format!("add_births: adjusting het_bin={bin} by +{count}"))?;
             }
         }
 
-        for child in births {
-            self.adherents.insert(child);
-        }
-
-        Ok(religion_adherents)
+        Ok(())
     }
 }

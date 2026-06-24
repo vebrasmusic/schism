@@ -312,7 +312,7 @@ impl Default for AdherentConfig {
             parental_heterodoxy_influence: UnitInterval::new(0.6),
             child_heterodoxy_concentration: PositiveReal::new(30.0),
             num_heterodoxy_bins: 500,
-            num_age_bins: 500,
+            num_age_bins: 20,
             conversion_base_rate: UnitInterval::new(0.7),
             heterodoxy_change_base_rate: UnitInterval::new(0.01),
             // per-GENERATION (20-yr) probabilities, converted from the old

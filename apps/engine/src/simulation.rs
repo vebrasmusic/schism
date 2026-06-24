@@ -69,12 +69,21 @@ impl Simulation {
             let age = sampled_age.round().clamp(0.0, oldest_starting_age as f64) as usize;
 
             // bin this adherent, add to histogram
-            root_adherents.bin(
-                heterodoxy.value(),
-                age,
-                sim.config.adherent.num_heterodoxy_bins,
-                sim.config.adherent.num_age_bins,
-            )?;
+            root_adherents
+                .bin(
+                    heterodoxy.value(),
+                    age,
+                    sim.config.adherent.num_heterodoxy_bins,
+                    sim.config.adherent.num_age_bins,
+                    sim.config.adherent.max_age_yrs,
+                )
+                .with_context(|| {
+                    format!(
+                        "binning initial adherent: heterodoxy={}, age={}",
+                        heterodoxy.value(),
+                        age
+                    )
+                })?;
         }
 
         let root_religion = Religion::new(None, sim.current_year, &mut sim.rng, root_adherents)

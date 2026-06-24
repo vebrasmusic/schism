@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use serde::Serialize;
 
@@ -19,7 +19,7 @@ pub(crate) struct GenerationReadout {
 
 #[derive(Serialize)]
 struct Totals {
-    people: usize,
+    people: String,
     religions: usize,
     active: usize,
     extinct: usize,
@@ -30,13 +30,42 @@ struct Totals {
 #[derive(Serialize)]
 struct ReligionRow {
     name: String,
-    adherents: usize,
+    adherents: String,
+    #[serde(skip)]
+    adherents_count: usize,
     status: &'static str,
     founding_date: u32,
     extinction_date: Option<u32>,
     age: u32,
     parent: String,
     new: bool,
+}
+
+fn fmt_count(n: usize) -> String {
+    let s = n.to_string();
+    let with_commas = s
+        .as_bytes()
+        .rchunks(3)
+        .rev()
+        .map(|chunk| std::str::from_utf8(chunk).unwrap())
+        .collect::<Vec<_>>()
+        .join(",");
+    let suffix = if n >= 1_000_000_000_000_000_000 {
+        " (quintillion)"
+    } else if n >= 1_000_000_000_000_000 {
+        " (quadrillion)"
+    } else if n >= 1_000_000_000_000 {
+        " (trillion)"
+    } else if n >= 1_000_000_000 {
+        " (billion)"
+    } else if n >= 1_000_000 {
+        " (million)"
+    } else if n >= 1_000 {
+        " (thousand)"
+    } else {
+        ""
+    };
+    format!("{with_commas}{suffix}")
 }
 
 impl Simulation {
@@ -48,21 +77,9 @@ impl Simulation {
         religions_at_start: &HashSet<ReligionKey>,
         mean_population_heterodoxy: f64,
     ) -> GenerationReadout {
-        // tally living adherents per religion, recomputed fresh so it reflects
-        // the post-schism / post-conversion state of this generation.
-        let mut adherent_counts: HashMap<ReligionKey, usize> = HashMap::new();
-        let mut total_people = 0usize;
-        for adherent in self.adherents.values() {
-            if adherent.is_dead() {
-                continue;
-            }
-            total_people += 1;
-            *adherent_counts.entry(adherent.religion).or_default() += 1;
-        }
-
-        if total_people > 75_864_062 {
-            panic!("population {total_people} exceeds 71 million");
-        }
+        // tally living adherents straight from each religion's histogram, which
+        // only ever holds living members (the dead are decremented out per tick).
+        let total_people = self.total_population() as usize;
 
         // one row per religion, newest foundings on top so the freshest sects
         // scan first; biggest congregation breaks ties within a founding cohort.
@@ -70,7 +87,7 @@ impl Simulation {
             .religions
             .iter()
             .map(|(religion_id, religion)| {
-                let living_adherents = adherent_counts.get(&religion_id).copied().unwrap_or(0);
+                let living_adherents = religion.total_population() as usize;
                 let is_new_this_generation = !religions_at_start.contains(&religion_id);
                 let parent_name = religion
                     .parent
@@ -80,7 +97,8 @@ impl Simulation {
 
                 ReligionRow {
                     name: religion.name.clone(),
-                    adherents: living_adherents,
+                    adherents: fmt_count(living_adherents),
+                    adherents_count: living_adherents,
                     status: if religion.is_extinct() {
                         "extinct"
                     } else {
@@ -98,7 +116,7 @@ impl Simulation {
             right
                 .founding_date
                 .cmp(&left.founding_date)
-                .then(right.adherents.cmp(&left.adherents))
+                .then(right.adherents_count.cmp(&left.adherents_count))
         });
 
         let total_religions = religion_rows.len();
@@ -110,7 +128,7 @@ impl Simulation {
 
         GenerationReadout {
             totals: Totals {
-                people: total_people,
+                people: fmt_count(total_people),
                 religions: total_religions,
                 active: active_religions,
                 extinct: total_religions - active_religions,
@@ -118,6 +136,31 @@ impl Simulation {
                 mean_heterodoxy: mean_population_heterodoxy,
             },
             religions: religion_rows,
+        }
+    }
+
+    /// mean heterodoxy across every living adherent in the world, weighting each
+    /// histogram bin's representative heterodoxy value by how many people sit in
+    /// it. returns 0.0 for an empty world to avoid dividing by zero.
+    pub(super) fn mean_living_heterodoxy(&self) -> f64 {
+        let num_heterodoxy_bins = self.config.adherent.num_heterodoxy_bins as f64;
+        let mut weighted_heterodoxy_sum = 0.0;
+        let mut total_living = 0u64;
+
+        for religion in self.religions.values() {
+            for (_age_band, heterodoxy_counts) in religion.adherents.iter_bands() {
+                for (heterodoxy_bin, count) in heterodoxy_counts {
+                    let heterodoxy_value = heterodoxy_bin.value() as f64 / num_heterodoxy_bins;
+                    weighted_heterodoxy_sum += heterodoxy_value * count.value() as f64;
+                    total_living += count.value();
+                }
+            }
+        }
+
+        if total_living == 0 {
+            0.0
+        } else {
+            weighted_heterodoxy_sum / total_living as f64
         }
     }
 }

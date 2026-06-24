@@ -27,6 +27,7 @@ impl Simulation {
         // advance the world clock one generation. religions born this tick are
         // stamped with this year, and any that die are stamped extinct with it.
         self.current_year += self.config.adherent.generation_length_yrs as u32;
+        let current_year = self.current_year;
 
         // total living population at the start of the tick, before anyone dies
         // or is born — drives the density-dependent mortality in remove_dead.
@@ -40,6 +41,11 @@ impl Simulation {
 
         // add births
         self.add_births()?;
+
+        // check and mark any dead religions
+        self.mark_extinct_religions(current_year);
+
+        // now next steps will only touch current living religions
 
         Ok(self.build_generation_readout(&religions_at_start, self.mean_living_heterodoxy()))
     }

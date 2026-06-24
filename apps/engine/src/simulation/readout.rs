@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use serde::Serialize;
 
-use crate::religion::ReligionKey;
+use crate::religion::{Religion, ReligionKey};
 
 use super::Simulation;
 
@@ -90,13 +90,13 @@ impl Simulation {
                 let living_adherents = religion.total_population() as usize;
                 let is_new_this_generation = !religions_at_start.contains(&religion_id);
                 let parent_name = religion
-                    .parent
+                    .parent()
                     .and_then(|parent_id| self.religions.get(parent_id))
-                    .map(|parent| parent.name.as_str())
+                    .map(|parent| parent.name())
                     .unwrap_or("none");
 
                 ReligionRow {
-                    name: religion.name.clone(),
+                    name: religion.name().to_owned(),
                     adherents: fmt_count(living_adherents),
                     adherents_count: living_adherents,
                     status: if religion.is_extinct() {
@@ -104,7 +104,7 @@ impl Simulation {
                     } else {
                         "active"
                     },
-                    founding_date: religion.founding_date,
+                    founding_date: religion.founding_date(),
                     extinction_date: religion.extinction_date(),
                     age: fmt_count(religion.age(self.current_year) as usize),
                     parent: parent_name.to_owned(),
@@ -148,12 +148,18 @@ impl Simulation {
         let mut total_living = 0u64;
 
         for religion in self.religions.values() {
-            for (_age_band, heterodoxy_counts) in religion.adherents.iter_bands() {
-                for (heterodoxy_bin, count) in heterodoxy_counts {
-                    let heterodoxy_value = heterodoxy_bin.value() as f64 / num_heterodoxy_bins;
-                    weighted_heterodoxy_sum += heterodoxy_value * count.value() as f64;
-                    total_living += count.value();
+            match religion {
+                Religion::Active { adherents, .. } => {
+                    for (_age_band, heterodoxy_counts) in adherents.iter_bands() {
+                        for (heterodoxy_bin, count) in heterodoxy_counts {
+                            let heterodoxy_value =
+                                heterodoxy_bin.value() as f64 / num_heterodoxy_bins;
+                            weighted_heterodoxy_sum += heterodoxy_value * count.value() as f64;
+                            total_living += count.value();
+                        }
+                    }
                 }
+                Religion::Extinct { .. } => {}
             }
         }
 

@@ -16,6 +16,7 @@ use crate::{
 
 mod adherent;
 mod readout;
+mod religion;
 mod tick;
 
 pub enum SimulationScale {

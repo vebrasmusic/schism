@@ -164,6 +164,13 @@ impl PopulationHistogram {
             .sum()
     }
 
+    /// Drop all count data for a religion that has gone extinct; replaces the
+    /// backing allocation with an empty vec so the memory is freed immediately.
+    /// Only call this when a religion dies — the histogram is unusable after.
+    pub fn clear(&mut self) {
+        self.counts = vec![];
+    }
+
     pub fn total_in_age_band(&self, age_band: AgeBand) -> Option<u64> {
         Some(self.get_age_band(age_band)?.iter().map(|c| c.value()).sum())
     }

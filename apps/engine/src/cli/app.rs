@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
-use crate::{config::SimulationConfig, environment::Environment, simulation::Simulation};
+use engine::{config::SimulationConfig, environment::Environment, simulation::Simulation};
 
 /// Schism engine command line interface.
 ///

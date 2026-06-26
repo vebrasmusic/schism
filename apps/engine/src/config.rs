@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -10,7 +11,7 @@ use crate::probability::{PositiveReal, UnitInterval};
 /// flags — then handed to `Simulation::new`. The engine reads from this and
 /// never reaches for hardcoded values, so any future caller (an HTTP backend, a
 /// test harness) just constructs this same struct and the engine is unchanged.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct SimulationConfig {
     pub world: WorldConfig,
@@ -21,11 +22,12 @@ pub struct SimulationConfig {
     /// JSON — hence `serde(skip)`. holds the carrying capacity et al. for the
     /// chosen environment.
     #[serde(skip)]
+    #[schemars(skip)]
     pub environment: EnvironmentConfig,
 }
 
 /// Top-level run settings: where, how long, how big, and the rng seed.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct WorldConfig {
     /// environment the simulation starts in
@@ -46,7 +48,7 @@ pub struct WorldConfig {
 }
 
 /// Per-adherent lifecycle rates.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct AdherentConfig {
     /// length in yrs of a generation (for aging up adherents)
@@ -83,9 +85,6 @@ pub struct AdherentConfig {
     /// base chance to convert when a new sect appears, scaled by heterodoxy
     pub conversion_base_rate: UnitInterval,
 
-    /// base per-tick heterodoxy drift, scaled by heterodoxy
-    pub heterodoxy_change_base_rate: UnitInterval,
-
     /// number of heterodoxy buckets in the population histogram
     pub num_heterodoxy_bins: usize,
 
@@ -100,23 +99,14 @@ pub struct AdherentConfig {
 }
 
 /// Knobs governing religions and when they split.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct ReligionConfig {
-    /// minimum living congregation before a religion can schism at all
-    pub min_congregation: usize,
-
     /// the belief fault line. heterodoxy strictly above this both (1) counts
     /// toward the "high heterodoxy" share that drives schism likelihood and
     /// (2) marks the wing that actually breaks away when a schism fires — the
     /// orthodox majority below it stays with the parent faith.
     pub high_heterodoxy_threshold: UnitInterval,
-
-    /// congregation size at which the population factor saturates to 1.0
-    pub population_factor_pivot: f64,
-
-    /// base multiplier on the per-tick schism chance
-    pub schism_base_rate: UnitInterval,
 
     /// maximum fraction of a congregation that can be high-heterodoxy before
     /// the religion is considered to have lost its orthodox character entirely
@@ -127,7 +117,7 @@ pub struct ReligionConfig {
 /// taking the first matching band. Birth bands end in a `u8::MAX` catch-all;
 /// mortality bands instead stop at the `max_age_yrs` cap (everyone older is
 /// force-killed). `validate` enforces the right tail for each.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct AgeBand {
     pub max_age: u8,
     pub rate: UnitInterval,
@@ -178,9 +168,6 @@ pub enum ConfigError {
          the last band only reaches {last_covered}"
     )]
     MortalityCapGap { cap: u8, last_covered: u8 },
-
-    #[error("{field} must be greater than zero")]
-    MustBePositive { field: String },
 }
 
 impl SimulationConfig {
@@ -213,12 +200,6 @@ impl SimulationConfig {
             return Err(ConfigError::MortalityCapGap {
                 cap: self.adherent.max_age_yrs,
                 last_covered,
-            });
-        }
-
-        if self.religion.population_factor_pivot <= 0.0 {
-            return Err(ConfigError::MustBePositive {
-                field: "religion.population_factor_pivot".to_owned(),
             });
         }
 
@@ -320,7 +301,6 @@ impl Default for AdherentConfig {
             num_heterodoxy_bins: 100,
             num_age_bins: 20,
             conversion_base_rate: UnitInterval::new(1.0),
-            heterodoxy_change_base_rate: UnitInterval::new(0.01),
             // per-GENERATION (20-yr) probabilities, converted from the old
             // per-year rates via p_gen = 1 - (1 - p_year)^20. beyond the last
             // band, `max_age_yrs` force-kills everyone (see Adherent::should_die).
@@ -376,15 +356,12 @@ impl Default for AdherentConfig {
 impl Default for ReligionConfig {
     fn default() -> Self {
         Self {
-            min_congregation: 10,
             // the fault line a schism splits along. sits well above the
             // population mean (0.25) so the breakaway wing is a genuine
             // heterodox minority, but low enough that the wing is non-empty —
             // at 0.7 essentially nobody clears it and every new sect is
             // stillborn.
             high_heterodoxy_threshold: UnitInterval::new(0.5),
-            population_factor_pivot: 1000.0,
-            schism_base_rate: UnitInterval::new(0.03),
             high_heterodoxy_max_fraction: UnitInterval::new(0.01),
         }
     }

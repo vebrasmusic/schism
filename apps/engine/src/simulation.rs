@@ -4,7 +4,6 @@ use rand_distr::Distribution;
 use slotmap::SlotMap;
 
 use crate::{
-    adherent::{Adherent, AdherentKey},
     config::SimulationConfig,
     histogram::PopulationHistogram,
     probability::{
@@ -20,9 +19,12 @@ mod readout;
 mod religion;
 mod tick;
 
+pub use readout::{ReadoutTotals, ReligionReadout, ReligionStatus, SimulationReadout};
+
 pub enum SimulationScale {
     Individual,
     Cohort,
+    #[allow(dead_code)]
     Aggregate,
 }
 
@@ -104,20 +106,32 @@ impl Simulation {
     }
 
     pub fn total_population(&self) -> u64 {
-        self.active_religions.values().map(|r| r.total_population()).sum()
+        self.active_religions
+            .values()
+            .map(|r| r.total_population())
+            .sum()
+    }
+
+    pub fn run_to_readout(&mut self) -> Result<SimulationReadout> {
+        self.run_to_readout_with_progress(|_, _| {})
+    }
+
+    pub fn run_to_readout_with_progress(
+        &mut self,
+        mut on_generation_complete: impl FnMut(u32, u32),
+    ) -> Result<SimulationReadout> {
+        let total_generations = self.config.world.num_generations;
+
+        for generation in 0..total_generations {
+            self.tick()?;
+            on_generation_complete(generation + 1, total_generations);
+        }
+
+        Ok(self.build_simulation_readout())
     }
 
     pub fn run(&mut self) -> Result<()> {
-        for generation in 0..self.config.world.num_generations {
-            eprintln!("gen {generation}");
-            self.tick()?;
-        }
-
-        eprintln!("simulation ended.");
-
-        let final_readout =
-            self.build_generation_readout(&Default::default(), self.mean_living_heterodoxy());
-
+        let final_readout = self.run_to_readout()?;
         let readout_json =
             serde_json::to_string_pretty(&final_readout).context("serializing final readout")?;
         println!("{readout_json}");

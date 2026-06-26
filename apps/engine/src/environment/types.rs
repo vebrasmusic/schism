@@ -1,9 +1,11 @@
 use clap::ValueEnum;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use strum_macros::Display;
 
 /// defines the differnet env types we can start in
-#[derive(Debug, Clone, Default, ValueEnum, Display, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, ValueEnum, Display, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub enum Environment {
     Desert,
     Jungle,

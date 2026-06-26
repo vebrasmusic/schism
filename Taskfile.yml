@@ -1,0 +1,19 @@
+version: "3"
+
+tasks:
+  gen:
+    desc: Generate the Schism API OpenAPI schema.
+    cmds:
+      - cargo run -p api --bin gen_openapi
+
+  dev:
+    desc: Generate OpenAPI, then run the Schism API server.
+    deps:
+      - gen
+    cmds:
+      - cargo run -p api --bin api
+
+  engine:
+    desc: Run the Schism engine CLI directly.
+    cmds:
+      - cargo run -p engine --release -- run {{.CLI_ARGS}}

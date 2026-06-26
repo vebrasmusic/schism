@@ -2,34 +2,12 @@ use anyhow::{Context, Result};
 use rand_distr::{Binomial, Distribution};
 
 use crate::{
-    adherent,
     histogram::{AgeBand, HeterodoxyBin, PopulationHistogram},
     religion::{Religion, ReligionKey},
     simulation::Simulation,
 };
 
 impl Simulation {
-    /// population-weighted mean heterodoxy across every living adherent in the simulation.
-    /// returns 0.0 for an empty world.
-    pub fn mean_heterodoxy(&self) -> f64 {
-        let mut weighted_sum = 0.0f64;
-        let mut total = 0u64;
-
-        for religion in self.active_religions.values() {
-            let pop = religion.total_population();
-            if pop > 0 {
-                weighted_sum += religion.mean_heterodoxy() * pop as f64;
-                total += pop;
-            }
-        }
-
-        if total == 0 {
-            0.0
-        } else {
-            weighted_sum / total as f64
-        }
-    }
-
     /// total all pop in all religions, check if they're extinct after the whole birth /death cycle
     pub(super) fn mark_extinct_religions(&mut self, current_date: u32) {
         let extinct_keys: Vec<ReligionKey> = self

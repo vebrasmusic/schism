@@ -1,16 +1,9 @@
-use core::panic;
 use std::collections::HashMap;
 
-use ahash::RandomState;
 use anyhow::{Context, Result};
-use rand_distr::num_traits::ToPrimitive;
 use rand_distr::{Beta, Binomial, Distribution};
 
-use crate::adherent::{Adherent, AdherentKey, AdherentStatus};
-use crate::histogram::{AgeBand, Count, HeterodoxyBin, PopulationHistogram};
-use crate::probability::{
-    UnitInterval, bin_adherents, create_child_heterodoxy_distribution, flip_weighted_coin,
-};
+use crate::histogram::{AgeBand, Count, HeterodoxyBin};
 use crate::religion::{Religion, ReligionKey};
 
 use super::Simulation;

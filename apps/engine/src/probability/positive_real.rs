@@ -1,7 +1,9 @@
 use std::ops::{AddAssign, Div, Mul};
 
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 
 /// a finite float guaranteed to be strictly positive — the open interval (0, ∞)
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -49,6 +51,24 @@ impl<'de> Deserialize<'de> for PositiveReal {
                 "value {value} is not a positive real (0.0, ∞)"
             )))
         }
+    }
+}
+
+impl JsonSchema for PositiveReal {
+    fn schema_name() -> Cow<'static, str> {
+        "PositiveReal".into()
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        concat!(module_path!(), "::PositiveReal").into()
+    }
+
+    fn json_schema(_gen: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "type": "number",
+            "format": "double",
+            "exclusiveMinimum": 0.0
+        })
     }
 }
 

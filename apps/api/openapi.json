@@ -1,0 +1,638 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Schism API",
+    "description": "Thin HTTP API for the Schism simulation engine.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/simulations/run": {
+      "post": {
+        "description": "Run a Schism simulation using a partial SimulationConfig JSON body.",
+        "operationId": "runSimulation",
+        "requestBody": {
+          "description": "Central control board for every tunable in the simulation.\n\n Built once at startup — from defaults, an optional `--config` file, and CLI\n flags — then handed to `Simulation::new`. The engine reads from this and\n never reaches for hardcoded values, so any future caller (an HTTP backend, a\n test harness) just constructs this same struct and the engine is unchanged.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulationConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationReadout"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/simulations/status": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationRunStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdherentConfig": {
+        "description": "Per-adherent lifecycle rates.",
+        "type": "object",
+        "properties": {
+          "birth": {
+            "description": "chance of giving birth per tick, looked up by age band",
+            "type": "array",
+            "default": [
+              {
+                "max_age": 14,
+                "rate": 0.0
+              },
+              {
+                "max_age": 29,
+                "rate": 0.7
+              },
+              {
+                "max_age": 44,
+                "rate": 0.4
+              },
+              {
+                "max_age": 59,
+                "rate": 0.05
+              },
+              {
+                "max_age": 255,
+                "rate": 0.0
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AgeBand"
+            }
+          },
+          "child_heterodoxy_concentration": {
+            "description": "conc. of the children around caclcualted expected value",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PositiveReal"
+              }
+            ],
+            "default": 30.0
+          },
+          "conversion_base_rate": {
+            "description": "base chance to convert when a new sect appears, scaled by heterodoxy",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UnitInterval"
+              }
+            ],
+            "default": 1.0
+          },
+          "generation_length_yrs": {
+            "description": "length in yrs of a generation (for aging up adherents)",
+            "type": "integer",
+            "format": "uint8",
+            "default": 20,
+            "maximum": 255,
+            "minimum": 0
+          },
+          "max_age_yrs": {
+            "description": "hard upper bound on age. the mortality bands model the actuarial table\n below this; at or beyond it survival is treated as impossible and the\n adherent is marked dead. keeps the 20-yr age jumps from walking past the\n table (where mortality reads as ~0) and overflowing `age` (a u8).",
+            "type": "integer",
+            "format": "uint8",
+            "default": 100,
+            "maximum": 255,
+            "minimum": 0
+          },
+          "mortality": {
+            "description": "chance of death per tick below `max_age_yrs`, looked up by age band",
+            "type": "array",
+            "default": [
+              {
+                "max_age": 49,
+                "rate": 0.02
+              },
+              {
+                "max_age": 69,
+                "rate": 0.18
+              },
+              {
+                "max_age": 79,
+                "rate": 0.64
+              },
+              {
+                "max_age": 99,
+                "rate": 0.96
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AgeBand"
+            }
+          },
+          "num_age_bins": {
+            "description": "number of age buckets in the population histogram",
+            "type": "integer",
+            "format": "uint",
+            "default": 20,
+            "minimum": 0
+          },
+          "num_heterodoxy_bins": {
+            "description": "number of heterodoxy buckets in the population histogram",
+            "type": "integer",
+            "format": "uint",
+            "default": 100,
+            "minimum": 0
+          },
+          "parental_heterodoxy_influence": {
+            "description": "heritability (parental / societal influence) over child's orthodoxy",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UnitInterval"
+              }
+            ],
+            "default": 0.85
+          },
+          "population_age_spread_yrs": {
+            "description": "spread (std dev, yrs) of the initial population's age distribution",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PositiveReal"
+              }
+            ],
+            "default": 15.0
+          },
+          "population_heterodoxy_concentration": {
+            "description": "controls diversity of population, conc. around the mean\n 5: very diverse\n 20: moderate\n 100: homogenous",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PositiveReal"
+              }
+            ],
+            "default": 15.0
+          },
+          "population_mean_age_yrs": {
+            "description": "mean starting age (yrs) for the initial population's age distribution, so\n the sim doesn't begin with everyone the same age",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PositiveReal"
+              }
+            ],
+            "default": 30.0
+          },
+          "population_mean_heterodoxy": {
+            "description": "0.2 => mostly orthodox society, 0.5 => balanced, 0.8 => mostly heterodox",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UnitInterval"
+              }
+            ],
+            "default": 0.25
+          }
+        }
+      },
+      "AgeBand": {
+        "description": "A single age bracket: applies `rate` to everyone with `age <= max_age`,\n taking the first matching band. Birth bands end in a `u8::MAX` catch-all;\n mortality bands instead stop at the `max_age_yrs` cap (everyone older is\n force-killed). `validate` enforces the right tail for each.",
+        "type": "object",
+        "properties": {
+          "max_age": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          },
+          "rate": {
+            "$ref": "#/components/schemas/UnitInterval"
+          }
+        },
+        "required": [
+          "max_age",
+          "rate"
+        ]
+      },
+      "ApiErrorBody": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "Environment": {
+        "description": "defines the differnet env types we can start in",
+        "type": "string",
+        "enum": [
+          "desert",
+          "jungle",
+          "plains"
+        ]
+      },
+      "PositiveReal": {
+        "type": "number",
+        "format": "double",
+        "exclusiveMinimum": 0.0
+      },
+      "ReadoutTotals": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "extinct": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "mean_heterodoxy": {
+            "type": "number",
+            "format": "double"
+          },
+          "population": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "religions": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "population",
+          "religions",
+          "active",
+          "extinct",
+          "mean_heterodoxy"
+        ]
+      },
+      "ReligionConfig": {
+        "description": "Knobs governing religions and when they split.",
+        "type": "object",
+        "properties": {
+          "high_heterodoxy_max_fraction": {
+            "description": "maximum fraction of a congregation that can be high-heterodoxy before\n the religion is considered to have lost its orthodox character entirely",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UnitInterval"
+              }
+            ],
+            "default": 0.01
+          },
+          "high_heterodoxy_threshold": {
+            "description": "the belief fault line. heterodoxy strictly above this both (1) counts\n toward the \"high heterodoxy\" share that drives schism likelihood and\n (2) marks the wing that actually breaks away when a schism fires — the\n orthodox majority below it stays with the parent faith.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UnitInterval"
+              }
+            ],
+            "default": 0.5
+          }
+        }
+      },
+      "ReligionReadout": {
+        "type": "object",
+        "properties": {
+          "adherents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "age": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "extinction_date": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "minimum": 0
+          },
+          "founding_date": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "parent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReligionStatus"
+          }
+        },
+        "required": [
+          "name",
+          "adherents",
+          "status",
+          "founding_date",
+          "age"
+        ]
+      },
+      "ReligionStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "extinct"
+        ]
+      },
+      "SimulationConfig": {
+        "description": "Central control board for every tunable in the simulation.\n\n Built once at startup — from defaults, an optional `--config` file, and CLI\n flags — then handed to `Simulation::new`. The engine reads from this and\n never reaches for hardcoded values, so any future caller (an HTTP backend, a\n test harness) just constructs this same struct and the engine is unchanged.",
+        "type": "object",
+        "properties": {
+          "adherent": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdherentConfig"
+              }
+            ],
+            "default": {
+              "birth": [
+                {
+                  "max_age": 14,
+                  "rate": 0.0
+                },
+                {
+                  "max_age": 29,
+                  "rate": 0.7
+                },
+                {
+                  "max_age": 44,
+                  "rate": 0.4
+                },
+                {
+                  "max_age": 59,
+                  "rate": 0.05
+                },
+                {
+                  "max_age": 255,
+                  "rate": 0.0
+                }
+              ],
+              "child_heterodoxy_concentration": 30.0,
+              "conversion_base_rate": 1.0,
+              "generation_length_yrs": 20,
+              "max_age_yrs": 100,
+              "mortality": [
+                {
+                  "max_age": 49,
+                  "rate": 0.02
+                },
+                {
+                  "max_age": 69,
+                  "rate": 0.18
+                },
+                {
+                  "max_age": 79,
+                  "rate": 0.64
+                },
+                {
+                  "max_age": 99,
+                  "rate": 0.96
+                }
+              ],
+              "num_age_bins": 20,
+              "num_heterodoxy_bins": 100,
+              "parental_heterodoxy_influence": 0.85,
+              "population_age_spread_yrs": 15.0,
+              "population_heterodoxy_concentration": 15.0,
+              "population_mean_age_yrs": 30.0,
+              "population_mean_heterodoxy": 0.25
+            }
+          },
+          "religion": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReligionConfig"
+              }
+            ],
+            "default": {
+              "high_heterodoxy_max_fraction": 0.01,
+              "high_heterodoxy_threshold": 0.5
+            }
+          },
+          "world": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WorldConfig"
+              }
+            ],
+            "default": {
+              "cohort_scale_threshold": 1000000,
+              "environment": "plains",
+              "num_generations": 150,
+              "seed": 67,
+              "starting_population": 500
+            }
+          }
+        }
+      },
+      "SimulationReadout": {
+        "type": "object",
+        "properties": {
+          "religions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReligionReadout"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ReadoutTotals"
+          }
+        },
+        "required": [
+          "totals",
+          "religions"
+        ]
+      },
+      "SimulationRunStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "idle"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "generation": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "state": {
+                "type": "string",
+                "const": "running"
+              },
+              "total_generations": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "state",
+              "generation",
+              "total_generations"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "generation": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "state": {
+                "type": "string",
+                "const": "complete"
+              },
+              "total_generations": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "state",
+              "generation",
+              "total_generations"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "const": "failed"
+              }
+            },
+            "required": [
+              "state",
+              "error"
+            ]
+          }
+        ]
+      },
+      "UnitInterval": {
+        "type": "number",
+        "format": "double",
+        "maximum": 1.0,
+        "minimum": 0.0
+      },
+      "WorldConfig": {
+        "description": "Top-level run settings: where, how long, how big, and the rng seed.",
+        "type": "object",
+        "properties": {
+          "cohort_scale_threshold": {
+            "description": "living-adherent count at which the sim switches from Individual to Cohort\n scale; beyond this the population is too large to track one-by-one",
+            "type": "integer",
+            "format": "uint",
+            "default": 1000000,
+            "minimum": 0
+          },
+          "environment": {
+            "description": "environment the simulation starts in",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Environment"
+              }
+            ],
+            "default": "plains"
+          },
+          "num_generations": {
+            "description": "number of generations (ticks) to run",
+            "type": "integer",
+            "format": "uint32",
+            "default": 150,
+            "minimum": 0
+          },
+          "seed": {
+            "description": "rng seed — fix this to reproduce / compare runs",
+            "type": "integer",
+            "format": "uint64",
+            "default": 67,
+            "minimum": 0
+          },
+          "starting_population": {
+            "description": "how many adherents the root religion starts with",
+            "type": "integer",
+            "format": "uint32",
+            "default": 500,
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}

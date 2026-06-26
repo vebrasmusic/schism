@@ -1,4 +1,3 @@
-use rand_distr::num_traits::ToPrimitive;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -203,7 +202,11 @@ impl PopulationHistogram {
             }
         }
 
-        if total == 0 { 0.0 } else { weighted_sum / total as f64 }
+        if total == 0 {
+            0.0
+        } else {
+            weighted_sum / total as f64
+        }
     }
 
     pub fn mean_heterodoxy(&self) -> f64 {
@@ -226,7 +229,11 @@ impl PopulationHistogram {
             }
         }
 
-        if total == 0 { 0.0 } else { weighted_sum / total as f64 }
+        if total == 0 {
+            0.0
+        } else {
+            weighted_sum / total as f64
+        }
     }
 
     pub fn adjust(

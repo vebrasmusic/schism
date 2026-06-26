@@ -1,7 +1,9 @@
 use std::ops::{AddAssign, Div, Mul, SubAssign};
 
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 
 /// a float guaranteed to be between 0 and 1
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -48,6 +50,25 @@ impl<'de> Deserialize<'de> for UnitInterval {
                 "value {value} is outside the unit interval [0.0, 1.0]"
             )))
         }
+    }
+}
+
+impl JsonSchema for UnitInterval {
+    fn schema_name() -> Cow<'static, str> {
+        "UnitInterval".into()
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        concat!(module_path!(), "::UnitInterval").into()
+    }
+
+    fn json_schema(_gen: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "type": "number",
+            "format": "double",
+            "minimum": 0.0,
+            "maximum": 1.0
+        })
     }
 }
 

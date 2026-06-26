@@ -1,154 +1,145 @@
-use std::collections::HashSet;
-
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::religion::{Religion, ReligionKey};
 
 use super::Simulation;
 
-/// the full world snapshot for a generation. `Serialize` is what gives us the
-/// pretty, one-field-per-line output via `to_string_pretty`. owns its strings
-/// (rather than borrowing from `Simulation`) so the run loop can hold onto the
-/// final generation's readout after the borrow ends and serialize it once at the
-/// very end of the run.
-#[derive(Serialize)]
-pub(crate) struct GenerationReadout {
-    totals: Totals,
-    religions: Vec<ReligionRow>,
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct SimulationReadout {
+    pub totals: ReadoutTotals,
+    pub religions: Vec<ReligionReadout>,
 }
 
-#[derive(Serialize)]
-struct Totals {
-    people: String,
-    religions: usize,
-    active: usize,
-    extinct: usize,
-    new_this_generation: usize,
-    mean_heterodoxy: f64,
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct ReadoutTotals {
+    pub population: u64,
+    pub religions: usize,
+    pub active: usize,
+    pub extinct: usize,
+    pub mean_heterodoxy: f64,
 }
 
-#[derive(Serialize)]
-struct ReligionRow {
-    name: String,
-    adherents: String,
-    #[serde(skip)]
-    adherents_count: usize,
-    status: &'static str,
-    founding_date: u32,
-    extinction_date: Option<u32>,
-    age: String,
-    parent: String,
-    new: bool,
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct ReligionReadout {
+    pub name: String,
+    pub adherents: u64,
+    pub status: ReligionStatus,
+    pub founding_date: u32,
+    pub extinction_date: Option<u32>,
+    pub age: u32,
+    pub parent: Option<String>,
 }
 
-fn fmt_count(n: usize) -> String {
-    let s = n.to_string();
-    let with_commas = s
-        .as_bytes()
-        .rchunks(3)
-        .rev()
-        .map(|chunk| std::str::from_utf8(chunk).unwrap())
-        .collect::<Vec<_>>()
-        .join(",");
-    let suffix = if n >= 1_000_000_000_000_000_000 {
-        " (quintillion)"
-    } else if n >= 1_000_000_000_000_000 {
-        " (quadrillion)"
-    } else if n >= 1_000_000_000_000 {
-        " (trillion)"
-    } else if n >= 1_000_000_000 {
-        " (billion)"
-    } else if n >= 1_000_000 {
-        " (million)"
-    } else if n >= 1_000 {
-        " (thousand)"
-    } else {
-        ""
-    };
-    format!("{with_commas}{suffix}")
+#[derive(Debug, Clone, Copy, Serialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReligionStatus {
+    Active,
+    Extinct,
+}
+
+pub struct ReligionReadoutSource<'a> {
+    pub religion: &'a Religion,
+    pub current_year: u32,
+    pub parent_name: Option<String>,
+}
+
+impl From<ReligionReadoutSource<'_>> for ReligionReadout {
+    fn from(source: ReligionReadoutSource<'_>) -> Self {
+        match source.religion {
+            Religion::Active {
+                name,
+                founding_date,
+                parent,
+                adherents,
+            } => {
+                let _parent_id = parent;
+
+                Self {
+                    name: name.clone(),
+                    adherents: adherents.total(),
+                    status: ReligionStatus::Active,
+                    founding_date: *founding_date,
+                    extinction_date: None,
+                    age: source.current_year.saturating_sub(*founding_date),
+                    parent: source.parent_name,
+                }
+            }
+            Religion::Extinct {
+                name,
+                founding_date,
+                parent,
+                extinction_date,
+            } => {
+                let _parent_id = parent;
+
+                Self {
+                    name: name.clone(),
+                    adherents: 0,
+                    status: ReligionStatus::Extinct,
+                    founding_date: *founding_date,
+                    extinction_date: Some(*extinction_date),
+                    age: extinction_date.saturating_sub(*founding_date),
+                    parent: source.parent_name,
+                }
+            }
+        }
+    }
 }
 
 impl Simulation {
-    /// build the detailed snapshot of the world state for a generation. purely
-    /// a readout — touches no simulation state. the caller owns the result and
-    /// decides when to serialize it (we only emit json once, at end of run).
-    pub(super) fn build_generation_readout(
-        &self,
-        religions_at_start: &HashSet<ReligionKey>,
-        mean_population_heterodoxy: f64,
-    ) -> GenerationReadout {
-        // tally living adherents straight from each religion's histogram, which
-        // only ever holds living members (the dead are decremented out per tick).
-        let total_people = self.total_population() as usize;
-
-        let lookup_parent_name = |parent_id: ReligionKey| -> &str {
+    pub(super) fn build_simulation_readout(&self) -> SimulationReadout {
+        let lookup_parent_name = |parent_id: ReligionKey| -> Option<String> {
             self.active_religions
                 .get(parent_id)
-                .map(|r| r.name())
+                .map(|r| r.name().to_owned())
                 .or_else(|| {
                     self.extinct_religions
                         .iter()
-                        .find(|(k, _)| *k == parent_id)
-                        .map(|(_, r)| r.name())
+                        .find(|(key, _)| *key == parent_id)
+                        .map(|(_, religion)| religion.name().to_owned())
                 })
-                .unwrap_or("none")
         };
 
-        let make_row = |religion_id: ReligionKey, religion: &Religion| -> ReligionRow {
-            let living_adherents = religion.total_population() as usize;
-            let is_new_this_generation = !religions_at_start.contains(&religion_id);
-            let parent_name = religion
-                .parent()
-                .map(|parent_id| lookup_parent_name(parent_id))
-                .unwrap_or("none");
-
-            ReligionRow {
-                name: religion.name().to_owned(),
-                adherents: fmt_count(living_adherents),
-                adherents_count: living_adherents,
-                status: if religion.is_extinct() { "extinct" } else { "active" },
-                founding_date: religion.founding_date(),
-                extinction_date: religion.extinction_date(),
-                age: fmt_count(religion.age(self.current_year) as usize),
-                parent: parent_name.to_owned(),
-                new: is_new_this_generation,
-            }
+        let make_row = |religion: &Religion| {
+            ReligionReadout::from(ReligionReadoutSource {
+                religion,
+                current_year: self.current_year,
+                parent_name: religion.parent().and_then(lookup_parent_name),
+            })
         };
 
-        // one row per religion, newest foundings on top so the freshest sects
-        // scan first; biggest congregation breaks ties within a founding cohort.
-        let mut religion_rows: Vec<ReligionRow> = self
+        let mut religion_rows: Vec<ReligionReadout> = self
             .active_religions
-            .iter()
-            .map(|(id, r)| make_row(id, r))
+            .values()
+            .map(make_row)
             .chain(
                 self.extinct_religions
                     .iter()
-                    .map(|(id, r)| make_row(*id, r)),
+                    .map(|(_, religion)| make_row(religion)),
             )
             .collect();
+
         religion_rows.sort_by(|left, right| {
             right
                 .founding_date
                 .cmp(&left.founding_date)
-                .then(right.adherents_count.cmp(&left.adherents_count))
+                .then(right.adherents.cmp(&left.adherents))
         });
 
         let total_religions = religion_rows.len();
         let active_religions = religion_rows
             .iter()
-            .filter(|row| row.status == "active")
+            .filter(|row| row.status == ReligionStatus::Active)
             .count();
-        let new_religions = religion_rows.iter().filter(|row| row.new).count();
 
-        GenerationReadout {
-            totals: Totals {
-                people: fmt_count(total_people),
+        SimulationReadout {
+            totals: ReadoutTotals {
+                population: self.total_population(),
                 religions: total_religions,
                 active: active_religions,
                 extinct: total_religions - active_religions,
-                new_this_generation: new_religions,
-                mean_heterodoxy: mean_population_heterodoxy,
+                mean_heterodoxy: self.mean_living_heterodoxy(),
             },
             religions: religion_rows,
         }
@@ -164,7 +155,12 @@ impl Simulation {
 
         for religion in self.active_religions.values() {
             match religion {
-                Religion::Active { adherents, .. } => {
+                Religion::Active {
+                    name: _name,
+                    founding_date: _founding_date,
+                    parent: _parent,
+                    adherents,
+                } => {
                     for (_age_band, heterodoxy_counts) in adherents.iter_bands() {
                         for (heterodoxy_bin, count) in heterodoxy_counts {
                             weighted_heterodoxy_sum +=
@@ -173,7 +169,12 @@ impl Simulation {
                         }
                     }
                 }
-                Religion::Extinct { .. } => {}
+                Religion::Extinct {
+                    name: _name,
+                    founding_date: _founding_date,
+                    parent: _parent,
+                    extinction_date: _extinction_date,
+                } => {}
             }
         }
 

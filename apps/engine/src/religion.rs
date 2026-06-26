@@ -108,13 +108,6 @@ impl Religion {
         }
     }
 
-    pub fn mean_heterodoxy(&self) -> f64 {
-        match self {
-            Self::Active { adherents, .. } => adherents.mean_heterodoxy(),
-            Self::Extinct { .. } => 0.0,
-        }
-    }
-
     pub fn is_extinct(&self) -> bool {
         matches!(self, Self::Extinct { .. })
     }

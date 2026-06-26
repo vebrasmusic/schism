@@ -106,27 +106,18 @@ impl Simulation {
     }
 
     pub fn run(&mut self) -> Result<()> {
-        // progress chatter goes to stderr so stdout carries only the final
-        // readout — that's what lets a caller do `engine run > out.json` and get
-        // a clean end-of-run tree with no log lines mixed in.
-        let mut final_generation_readout = None;
-
         for generation in 0..self.config.world.num_generations {
-            eprintln!("on generation {generation}");
-            final_generation_readout = Some(self.tick()?);
+            eprintln!("gen {generation}");
+            self.tick()?;
         }
 
         eprintln!("simulation ended.");
 
-        // emit the world state once, at the very end, as the json "end tree".
-        // a zero-generation run never ticks, so fall back to the initial world.
-        let final_generation_readout = final_generation_readout.unwrap_or_else(|| {
-            let religions_at_start = self.religions.keys().collect();
-            self.build_generation_readout(&religions_at_start, self.mean_living_heterodoxy())
-        });
+        let final_readout =
+            self.build_generation_readout(&Default::default(), self.mean_living_heterodoxy());
 
-        let readout_json = serde_json::to_string_pretty(&final_generation_readout)
-            .context("serializing final generation readout")?;
+        let readout_json =
+            serde_json::to_string_pretty(&final_readout).context("serializing final readout")?;
         println!("{readout_json}");
 
         Ok(())

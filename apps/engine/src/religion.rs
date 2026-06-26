@@ -34,7 +34,7 @@ pub enum Religion {
 
 impl Religion {
     pub fn new(
-        parent: Option<(&Religion, ReligionKey)>,
+        parent: Option<(&str, ReligionKey)>,
         founding_date: u32,
         rng: &mut SmallRng,
         adherents: PopulationHistogram,
@@ -46,11 +46,11 @@ impl Religion {
                 parent: None,
                 adherents,
             },
-            Some((parent_religion, parent_id)) => Self::Active {
-                name: generate_name(Some(parent_religion.name()), rng),
+            Some((parent_religion_name, parent_id)) => Self::Active {
+                name: generate_name(Some(parent_religion_name), rng),
                 founding_date,
                 parent: Some(parent_id),
-                adherents: todo!("migrate some adherents to new religion"),
+                adherents,
             },
         };
 
@@ -108,6 +108,13 @@ impl Religion {
         }
     }
 
+    pub fn mean_heterodoxy(&self) -> f64 {
+        match self {
+            Self::Active { adherents, .. } => adherents.mean_heterodoxy(),
+            Self::Extinct { .. } => 0.0,
+        }
+    }
+
     pub fn is_extinct(&self) -> bool {
         matches!(self, Self::Extinct { .. })
     }
@@ -115,7 +122,9 @@ impl Religion {
     pub fn extinction_date(&self) -> Option<u32> {
         match self {
             Self::Active { .. } => None,
-            Self::Extinct { extinction_date, .. } => Some(*extinction_date),
+            Self::Extinct {
+                extinction_date, ..
+            } => Some(*extinction_date),
         }
     }
 

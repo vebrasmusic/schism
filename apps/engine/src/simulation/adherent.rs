@@ -4,14 +4,14 @@ use std::collections::HashMap;
 use ahash::RandomState;
 use anyhow::{Context, Result};
 use rand_distr::num_traits::ToPrimitive;
-use rand_distr::{Binomial, Distribution};
+use rand_distr::{Beta, Binomial, Distribution};
 
 use crate::adherent::{Adherent, AdherentKey, AdherentStatus};
 use crate::histogram::{AgeBand, Count, HeterodoxyBin, PopulationHistogram};
 use crate::probability::{
     UnitInterval, bin_adherents, create_child_heterodoxy_distribution, flip_weighted_coin,
 };
-use crate::religion::Religion;
+use crate::religion::{Religion, ReligionKey};
 
 use super::Simulation;
 
@@ -74,8 +74,7 @@ impl Simulation {
     pub(super) fn increment_age(&mut self) -> Result<()> {
         let years_per_band =
             self.config.adherent.max_age_yrs as usize / self.config.adherent.num_age_bins;
-        let bands_to_advance =
-            self.config.adherent.generation_length_yrs as usize / years_per_band;
+        let bands_to_advance = self.config.adherent.generation_length_yrs as usize / years_per_band;
         let heterodoxy_row_width = self.config.adherent.num_heterodoxy_bins + 1;
 
         for (_, religion) in &mut self.religions {
@@ -103,10 +102,17 @@ impl Simulation {
         Ok(())
     }
 
-    pub(super) fn add_births(&mut self) -> Result<()> {
-        for (_, religion) in &mut self.religions {
+    pub(super) fn add_births(
+        &mut self,
+        child_distributions_map: HashMap<ReligionKey, Vec<Beta<f64>>>,
+    ) -> Result<()> {
+        for (religion_key, religion) in &mut self.religions {
             match religion {
                 Religion::Active { adherents, .. } => {
+                    let religion_het_distributions = child_distributions_map
+                        .get(&religion_key)
+                        .ok_or_else(|| anyhow::anyhow!("add_births: no heterodoxy distributions found for religion key {:?}", religion_key))?;
+
                     let mut birth_counts_per_heterodoxy_bin: Vec<u64> =
                         vec![0; self.config.adherent.num_heterodoxy_bins + 1];
 
@@ -121,10 +127,21 @@ impl Simulation {
                             .value();
 
                         for (heterodoxy_bin, count) in age_band_vector {
+                            let het_distr = religion_het_distributions
+                                .get(heterodoxy_bin.value())
+                                .ok_or_else(|| anyhow::anyhow!("add_births: heterodoxy bin {} out of range (distributions len={})", heterodoxy_bin.value(), religion_het_distributions.len()))?;
+
                             let num_born =
                                 Binomial::new(count.value(), birth_rate)?.sample(&mut self.rng);
 
-                            birth_counts_per_heterodoxy_bin[heterodoxy_bin.value()] += num_born;
+                            for _ in 0..num_born {
+                                let child_het = HeterodoxyBin::from_heterodoxy(
+                                    het_distr.sample(&mut self.rng),
+                                    self.config.adherent.num_heterodoxy_bins,
+                                );
+
+                                birth_counts_per_heterodoxy_bin[child_het.value()] += 1;
+                            }
                         }
                     }
 

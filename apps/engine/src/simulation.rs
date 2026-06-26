@@ -15,6 +15,7 @@ use crate::{
 };
 
 mod adherent;
+mod probability;
 mod readout;
 mod religion;
 mod tick;

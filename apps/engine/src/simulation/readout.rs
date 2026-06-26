@@ -143,7 +143,7 @@ impl Simulation {
     /// histogram bin's representative heterodoxy value by how many people sit in
     /// it. returns 0.0 for an empty world to avoid dividing by zero.
     pub(super) fn mean_living_heterodoxy(&self) -> f64 {
-        let num_heterodoxy_bins = self.config.adherent.num_heterodoxy_bins as f64;
+        let num_het_bins = self.config.adherent.num_heterodoxy_bins;
         let mut weighted_heterodoxy_sum = 0.0;
         let mut total_living = 0u64;
 
@@ -152,9 +152,8 @@ impl Simulation {
                 Religion::Active { adherents, .. } => {
                     for (_age_band, heterodoxy_counts) in adherents.iter_bands() {
                         for (heterodoxy_bin, count) in heterodoxy_counts {
-                            let heterodoxy_value =
-                                heterodoxy_bin.value() as f64 / num_heterodoxy_bins;
-                            weighted_heterodoxy_sum += heterodoxy_value * count.value() as f64;
+                            weighted_heterodoxy_sum +=
+                                heterodoxy_bin.to_heterodoxy(num_het_bins) * count.value() as f64;
                             total_living += count.value();
                         }
                     }

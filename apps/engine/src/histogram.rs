@@ -35,6 +35,14 @@ impl HeterodoxyBin {
     pub fn value(&self) -> usize {
         self.0
     }
+
+    pub fn to_heterodoxy(&self, num_het_bins: usize) -> f64 {
+        self.0 as f64 / num_het_bins as f64
+    }
+
+    pub fn from_heterodoxy(het: f64, num_het_bins: usize) -> Self {
+        HeterodoxyBin((het * num_het_bins as f64).round() as usize)
+    }
 }
 
 impl From<usize> for HeterodoxyBin {
@@ -50,6 +58,13 @@ impl AgeBand {
 
     pub fn get_age(&self, num_age_bins: usize, max_age: u8) -> usize {
         self.value() * max_age as usize / num_age_bins
+    }
+
+    pub fn from_age(age: usize, num_age_bins: usize, max_age: u8) -> Self {
+        AgeBand(
+            ((age as f64 * (num_age_bins as f64 / max_age as f64)).round() as usize)
+                .min(num_age_bins - 1),
+        )
     }
 }
 
@@ -132,23 +147,12 @@ impl PopulationHistogram {
         num_age_bands: usize,
         max_age: u8,
     ) -> Result<(), HistogramError> {
-        let het_bin = HeterodoxyBin(
-            (heterodoxy * num_het_bins as f64)
-                .round()
-                .to_usize()
-                .unwrap(),
-        );
+        let het_bin = HeterodoxyBin::from_heterodoxy(heterodoxy, num_het_bins);
 
         // ages at the very top of the range (e.g. one below max_age) round up to
         // band index `num_age_bands`, which is one past the last row — clamp them
         // into the oldest band so binning the initial population can't panic.
-        let age_band = AgeBand(
-            (age as f64 * (num_age_bands as f64 / max_age as f64))
-                .round()
-                .to_usize()
-                .unwrap()
-                .min(num_age_bands - 1),
-        );
+        let age_band = AgeBand::from_age(age, num_age_bands, max_age);
 
         self.get_mut(age_band, het_bin)
             .ok_or(HistogramError::OutOfBounds { age_band, het_bin })?
@@ -173,6 +177,31 @@ impl PopulationHistogram {
 
     pub fn total_in_age_band(&self, age_band: AgeBand) -> Option<u64> {
         Some(self.get_age_band(age_band)?.iter().map(|c| c.value()).sum())
+    }
+
+    /// weighted mean heterodoxy across all age bands, using bin index / num_het_bins as
+    /// each bin's representative heterodoxy value. returns 0.0 for an empty histogram.
+    pub fn mean_heterodoxy(&self) -> f64 {
+        let num_het_bins = match self.counts.first() {
+            Some(row) if !row.is_empty() => row.len() - 1,
+            _ => return 0.0,
+        };
+        if num_het_bins == 0 {
+            return 0.0;
+        }
+
+        let mut weighted_sum = 0.0f64;
+        let mut total = 0u64;
+
+        for row in &self.counts {
+            for (het_bin_idx, count) in row.iter().enumerate() {
+                let pop = count.value();
+                weighted_sum += HeterodoxyBin(het_bin_idx).to_heterodoxy(num_het_bins) * pop as f64;
+                total += pop;
+            }
+        }
+
+        if total == 0 { 0.0 } else { weighted_sum / total as f64 }
     }
 
     pub fn adjust(

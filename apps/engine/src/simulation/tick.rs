@@ -36,16 +36,25 @@ impl Simulation {
         // get rid of any adherents that died
         self.remove_dead(population_at_tick_start)?;
 
+        // if everyone's dead, then we just end it
+        if self.total_population() == 0 {
+            panic!("ran out of ppl!");
+        };
+
         // advance ages
         self.increment_age()?;
 
+        // now create child distr. vector once so we can reuse
+        let child_distributions = self.create_child_heterodoxy_distributions()?;
+
         // add births
-        self.add_births()?;
+        self.add_births(child_distributions)?;
 
         // check and mark any dead religions
         self.mark_extinct_religions(current_year);
 
         // now next steps will only touch current living religions
+        self.schism_religions()?;
 
         Ok(self.build_generation_readout(&religions_at_start, self.mean_living_heterodoxy()))
     }

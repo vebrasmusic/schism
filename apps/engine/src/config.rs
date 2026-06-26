@@ -43,9 +43,6 @@ pub struct WorldConfig {
     /// living-adherent count at which the sim switches from Individual to Cohort
     /// scale; beyond this the population is too large to track one-by-one
     pub cohort_scale_threshold: usize,
-
-    /// number of heterodoxy buckets used when collapsing adherents into cohorts
-    pub cohort_heterodoxy_bins: usize,
 }
 
 /// Per-adherent lifecycle rates.
@@ -120,6 +117,10 @@ pub struct ReligionConfig {
 
     /// base multiplier on the per-tick schism chance
     pub schism_base_rate: UnitInterval,
+
+    /// maximum fraction of a congregation that can be high-heterodoxy before
+    /// the religion is considered to have lost its orthodox character entirely
+    pub high_heterodoxy_max_fraction: UnitInterval,
 }
 
 /// A single age bracket: applies `rate` to everyone with `age <= max_age`,
@@ -258,7 +259,6 @@ impl Default for WorldConfig {
             starting_population: 500,
             seed: 67,
             cohort_scale_threshold: 1_000_000,
-            cohort_heterodoxy_bins: 100,
         }
     }
 }
@@ -315,11 +315,11 @@ impl Default for AdherentConfig {
             population_heterodoxy_concentration: PositiveReal::new(15.0),
             population_mean_age_yrs: PositiveReal::new(30.0),
             population_age_spread_yrs: PositiveReal::new(15.0),
-            parental_heterodoxy_influence: UnitInterval::new(0.6),
+            parental_heterodoxy_influence: UnitInterval::new(0.85),
             child_heterodoxy_concentration: PositiveReal::new(30.0),
-            num_heterodoxy_bins: 500,
+            num_heterodoxy_bins: 100,
             num_age_bins: 20,
-            conversion_base_rate: UnitInterval::new(0.7),
+            conversion_base_rate: UnitInterval::new(1.0),
             heterodoxy_change_base_rate: UnitInterval::new(0.01),
             // per-GENERATION (20-yr) probabilities, converted from the old
             // per-year rates via p_gen = 1 - (1 - p_year)^20. beyond the last
@@ -385,6 +385,7 @@ impl Default for ReligionConfig {
             high_heterodoxy_threshold: UnitInterval::new(0.5),
             population_factor_pivot: 1000.0,
             schism_base_rate: UnitInterval::new(0.03),
+            high_heterodoxy_max_fraction: UnitInterval::new(0.05),
         }
     }
 }

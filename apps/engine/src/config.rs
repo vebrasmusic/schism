@@ -385,7 +385,7 @@ impl Default for ReligionConfig {
             high_heterodoxy_threshold: UnitInterval::new(0.5),
             population_factor_pivot: 1000.0,
             schism_base_rate: UnitInterval::new(0.03),
-            high_heterodoxy_max_fraction: UnitInterval::new(0.05),
+            high_heterodoxy_max_fraction: UnitInterval::new(0.01),
         }
     }
 }

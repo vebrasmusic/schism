@@ -4,7 +4,7 @@ use rand_distr::{Binomial, Distribution};
 use crate::{
     adherent,
     histogram::{AgeBand, HeterodoxyBin, PopulationHistogram},
-    religion::Religion,
+    religion::{Religion, ReligionKey},
     simulation::Simulation,
 };
 
@@ -15,7 +15,7 @@ impl Simulation {
         let mut weighted_sum = 0.0f64;
         let mut total = 0u64;
 
-        for religion in self.religions.values() {
+        for religion in self.active_religions.values() {
             let pop = religion.total_population();
             if pop > 0 {
                 weighted_sum += religion.mean_heterodoxy() * pop as f64;
@@ -32,9 +32,17 @@ impl Simulation {
 
     /// total all pop in all religions, check if they're extinct after the whole birth /death cycle
     pub(super) fn mark_extinct_religions(&mut self, current_date: u32) {
-        for (_, religion) in &mut self.religions {
-            if religion.total_population() == 0 {
+        let extinct_keys: Vec<ReligionKey> = self
+            .active_religions
+            .iter()
+            .filter(|(_, r)| r.total_population() == 0)
+            .map(|(k, _)| k)
+            .collect();
+
+        for key in extinct_keys {
+            if let Some(mut religion) = self.active_religions.remove(key) {
                 religion.mark_extinct(current_date);
+                self.extinct_religions.push((key, religion));
             }
         }
     }
@@ -42,7 +50,7 @@ impl Simulation {
     pub(super) fn schism_religions(&mut self) -> Result<()> {
         // for each religion, see if it triggers
         let mut new_religions: Vec<Religion> = vec![];
-        for (religion_key, religion) in &mut self.religions {
+        for (religion_key, religion) in &mut self.active_religions {
             match religion {
                 Religion::Active {
                     adherents,
@@ -76,6 +84,49 @@ impl Simulation {
 
                     // past this, we have schismed
 
+                    // pass 1: pull the converts out of the parent, remembering
+                    // where each came from, and accumulate their mean heterodoxy.
+                    // heterodoxy isn't age-specific, so it's one mean pooled across
+                    // every age band.
+                    let mut converts: Vec<(usize, usize, u64)> = vec![];
+                    let mut convert_weighted_sum = 0.0f64;
+                    let mut convert_total = 0.0f64;
+
+                    for (age_band, age_band_vec) in adherents.iter_mut().enumerate() {
+                        for (heterodoxy_bin, count) in
+                            age_band_vec.iter_mut().enumerate().skip(threshold_as_bin)
+                        {
+                            let num_converts = Binomial::new(
+                                count.value(),
+                                heterodoxy_bin as f64
+                                    / self.config.adherent.num_heterodoxy_bins as f64
+                                    * self.config.adherent.conversion_base_rate.value(),
+                            )?
+                            .sample(&mut self.rng);
+
+                            if num_converts == 0 {
+                                continue;
+                            }
+
+                            // remove the converts from the parent religion
+                            count.adjust(-(num_converts as i64))?;
+
+                            let heterodoxy_value = heterodoxy_bin as f64
+                                / self.config.adherent.num_heterodoxy_bins as f64;
+                            convert_weighted_sum += heterodoxy_value * num_converts as f64;
+                            convert_total += num_converts as f64;
+                            converts.push((age_band, heterodoxy_bin, num_converts));
+                        }
+                    }
+
+                    // nobody actually broke away this round — don't spawn a
+                    // stillborn religion.
+                    if convert_total == 0.0 {
+                        continue;
+                    }
+
+                    let mean_convert_heterodoxy = convert_weighted_sum / convert_total;
+
                     let mut new_religion = Religion::new(
                         Some((religion_name, religion_key)),
                         self.current_year,
@@ -95,29 +146,30 @@ impl Simulation {
                         panic!("new religion shouldn't be extinct");
                     };
 
-                    // move over adhernets to this new religion
-                    for (age_band, age_band_vec) in adherents.iter_mut().enumerate() {
-                        for (heterodoxy_bin, count) in
-                            age_band_vec.iter_mut().enumerate().skip(threshold_as_bin)
-                        {
-                            let num_converts = Binomial::new(
-                                count.value(),
-                                heterodoxy_bin as f64
-                                    / self.config.adherent.num_heterodoxy_bins as f64
-                                    * self.config.adherent.conversion_base_rate.value(),
-                            )?
-                            .sample(&mut self.rng);
+                    // pass 2: re-center converts around their own mean. the
+                    // daughter's orthodoxy is its members' center of mass: a convert
+                    // who sat at that mean becomes the new mainstream (heterodoxy 0),
+                    // those above stay heterodox and seed the daughter's own future
+                    // schisms, and those below the mean collapse to orthodox. rescale
+                    // [mean, 1.0] onto [0, 1]:
+                    //   new_het = max(0, old_het - mean) / (1 - mean)
+                    let heterodoxy_span = (1.0 - mean_convert_heterodoxy).max(f64::EPSILON);
 
-                            // get rid of it from the current religion
-                            count.adjust(-(num_converts as i64))?;
+                    for (age_band, heterodoxy_bin, num_converts) in converts {
+                        let old_heterodoxy =
+                            heterodoxy_bin as f64 / self.config.adherent.num_heterodoxy_bins as f64;
+                        let recentered_heterodoxy =
+                            ((old_heterodoxy - mean_convert_heterodoxy) / heterodoxy_span).max(0.0);
+                        let recentered_bin = HeterodoxyBin::from_heterodoxy(
+                            recentered_heterodoxy,
+                            self.config.adherent.num_heterodoxy_bins,
+                        );
 
-                            // add to new religion
-                            new_religion_adherents.adjust(
-                                AgeBand::from(age_band),
-                                HeterodoxyBin::from(heterodoxy_bin),
-                                num_converts as i64,
-                            )?;
-                        }
+                        new_religion_adherents.adjust(
+                            AgeBand::from(age_band),
+                            recentered_bin,
+                            num_converts as i64,
+                        )?;
                     }
 
                     new_religions.push(new_religion);
@@ -127,7 +179,7 @@ impl Simulation {
         }
 
         new_religions.into_iter().for_each(|r| {
-            self.religions.insert(r);
+            self.active_religions.insert(r);
         });
 
         Ok(())

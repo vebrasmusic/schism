@@ -81,36 +81,51 @@ impl Simulation {
         // only ever holds living members (the dead are decremented out per tick).
         let total_people = self.total_population() as usize;
 
+        let lookup_parent_name = |parent_id: ReligionKey| -> &str {
+            self.active_religions
+                .get(parent_id)
+                .map(|r| r.name())
+                .or_else(|| {
+                    self.extinct_religions
+                        .iter()
+                        .find(|(k, _)| *k == parent_id)
+                        .map(|(_, r)| r.name())
+                })
+                .unwrap_or("none")
+        };
+
+        let make_row = |religion_id: ReligionKey, religion: &Religion| -> ReligionRow {
+            let living_adherents = religion.total_population() as usize;
+            let is_new_this_generation = !religions_at_start.contains(&religion_id);
+            let parent_name = religion
+                .parent()
+                .map(|parent_id| lookup_parent_name(parent_id))
+                .unwrap_or("none");
+
+            ReligionRow {
+                name: religion.name().to_owned(),
+                adherents: fmt_count(living_adherents),
+                adherents_count: living_adherents,
+                status: if religion.is_extinct() { "extinct" } else { "active" },
+                founding_date: religion.founding_date(),
+                extinction_date: religion.extinction_date(),
+                age: fmt_count(religion.age(self.current_year) as usize),
+                parent: parent_name.to_owned(),
+                new: is_new_this_generation,
+            }
+        };
+
         // one row per religion, newest foundings on top so the freshest sects
         // scan first; biggest congregation breaks ties within a founding cohort.
         let mut religion_rows: Vec<ReligionRow> = self
-            .religions
+            .active_religions
             .iter()
-            .map(|(religion_id, religion)| {
-                let living_adherents = religion.total_population() as usize;
-                let is_new_this_generation = !religions_at_start.contains(&religion_id);
-                let parent_name = religion
-                    .parent()
-                    .and_then(|parent_id| self.religions.get(parent_id))
-                    .map(|parent| parent.name())
-                    .unwrap_or("none");
-
-                ReligionRow {
-                    name: religion.name().to_owned(),
-                    adherents: fmt_count(living_adherents),
-                    adherents_count: living_adherents,
-                    status: if religion.is_extinct() {
-                        "extinct"
-                    } else {
-                        "active"
-                    },
-                    founding_date: religion.founding_date(),
-                    extinction_date: religion.extinction_date(),
-                    age: fmt_count(religion.age(self.current_year) as usize),
-                    parent: parent_name.to_owned(),
-                    new: is_new_this_generation,
-                }
-            })
+            .map(|(id, r)| make_row(id, r))
+            .chain(
+                self.extinct_religions
+                    .iter()
+                    .map(|(id, r)| make_row(*id, r)),
+            )
             .collect();
         religion_rows.sort_by(|left, right| {
             right
@@ -147,7 +162,7 @@ impl Simulation {
         let mut weighted_heterodoxy_sum = 0.0;
         let mut total_living = 0u64;
 
-        for religion in self.religions.values() {
+        for religion in self.active_religions.values() {
             match religion {
                 Religion::Active { adherents, .. } => {
                     for (_age_band, heterodoxy_counts) in adherents.iter_bands() {

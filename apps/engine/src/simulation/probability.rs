@@ -14,7 +14,7 @@ impl Simulation {
     ) -> Result<HashMap<ReligionKey, Vec<Beta<f64>>>> {
         let mut distr_map: HashMap<ReligionKey, Vec<Beta<f64>>> = HashMap::new();
 
-        for (key, religion) in self.religions.iter() {
+        for (key, religion) in self.active_religions.iter() {
             match religion {
                 crate::religion::Religion::Active { adherents, .. } => {
                     let mean_heterodoxy = adherents.mean_heterodoxy();

@@ -181,6 +181,31 @@ impl PopulationHistogram {
 
     /// weighted mean heterodoxy across all age bands, using bin index / num_het_bins as
     /// each bin's representative heterodoxy value. returns 0.0 for an empty histogram.
+    /// weighted mean heterodoxy for only the bins at or above `threshold`.
+    /// returns 0.0 when no population exists above the threshold.
+    pub fn mean_heterodoxy_above(&self, threshold: HeterodoxyBin) -> f64 {
+        let num_het_bins = match self.counts.first() {
+            Some(row) if !row.is_empty() => row.len() - 1,
+            _ => return 0.0,
+        };
+        if num_het_bins == 0 {
+            return 0.0;
+        }
+
+        let mut weighted_sum = 0.0f64;
+        let mut total = 0u64;
+
+        for row in &self.counts {
+            for (het_bin_idx, count) in row.iter().enumerate().skip(threshold.0) {
+                let pop = count.value();
+                weighted_sum += HeterodoxyBin(het_bin_idx).to_heterodoxy(num_het_bins) * pop as f64;
+                total += pop;
+            }
+        }
+
+        if total == 0 { 0.0 } else { weighted_sum / total as f64 }
+    }
+
     pub fn mean_heterodoxy(&self) -> f64 {
         let num_het_bins = match self.counts.first() {
             Some(row) if !row.is_empty() => row.len() - 1,

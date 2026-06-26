@@ -27,7 +27,7 @@ impl Simulation {
         let crowding_factor =
             total_population as f64 / self.config.environment.carrying_capacity as f64;
 
-        for (_, religion) in &mut self.religions {
+        for (_, religion) in &mut self.active_religions {
             match religion {
                 Religion::Active { adherents, .. } => {
                     for (age_band, age_band_vector) in adherents.iter_bands_mut() {
@@ -77,7 +77,7 @@ impl Simulation {
         let bands_to_advance = self.config.adherent.generation_length_yrs as usize / years_per_band;
         let heterodoxy_row_width = self.config.adherent.num_heterodoxy_bins + 1;
 
-        for (_, religion) in &mut self.religions {
+        for (_, religion) in &mut self.active_religions {
             match religion {
                 Religion::Active { adherents, .. } => {
                     let old_counts = adherents.take_counts();
@@ -106,7 +106,7 @@ impl Simulation {
         &mut self,
         child_distributions_map: HashMap<ReligionKey, Vec<Beta<f64>>>,
     ) -> Result<()> {
-        for (religion_key, religion) in &mut self.religions {
+        for (religion_key, religion) in &mut self.active_religions {
             match religion {
                 Religion::Active { adherents, .. } => {
                     let religion_het_distributions = child_distributions_map

@@ -27,7 +27,8 @@ pub enum SimulationScale {
 }
 
 pub struct Simulation {
-    religions: SlotMap<ReligionKey, Religion>,
+    active_religions: SlotMap<ReligionKey, Religion>,
+    extinct_religions: Vec<(ReligionKey, Religion)>,
     config: SimulationConfig,
     scale: SimulationScale,
     rng: SmallRng,
@@ -43,7 +44,8 @@ impl Simulation {
         config.environment = config.world.environment.config();
 
         let mut sim = Self {
-            religions: SlotMap::with_key(),
+            active_religions: SlotMap::with_key(),
+            extinct_religions: Vec::new(),
             rng: SmallRng::seed_from_u64(config.world.seed),
             scale: SimulationScale::Individual,
             config,
@@ -96,13 +98,13 @@ impl Simulation {
         let root_religion = Religion::new(None, sim.current_year, &mut sim.rng, root_adherents)
             .context("creating new religion")?;
 
-        let _ = sim.religions.insert(root_religion);
+        let _ = sim.active_religions.insert(root_religion);
 
         Ok(sim)
     }
 
     pub fn total_population(&self) -> u64 {
-        self.religions.values().map(|r| r.total_population()).sum()
+        self.active_religions.values().map(|r| r.total_population()).sum()
     }
 
     pub fn run(&mut self) -> Result<()> {

@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
-use rand::{SeedableRng, rngs::SmallRng};
+use rand::{RngExt, SeedableRng, rngs::SmallRng};
 use rand_distr::Distribution;
+use serde::Serialize;
 use slotmap::SlotMap;
 
 use crate::{
@@ -34,8 +35,15 @@ pub struct Simulation {
     config: SimulationConfig,
     scale: SimulationScale,
     rng: SmallRng,
+    seed: u64,
     /// world clock in years, counting up from 0; advanced one generation per tick
     current_year: u32,
+}
+
+#[derive(Debug, Serialize)]
+struct EngineRunOutput {
+    seed: u64,
+    readout: SimulationReadout,
 }
 
 impl Simulation {
@@ -44,11 +52,13 @@ impl Simulation {
         // fold them into the config so the rest of the engine reads them off
         // `self.config.environment`, same as the other sub-configs.
         config.environment = config.world.environment.config();
+        let seed = config.world.seed.unwrap_or_else(|| rand::rng().random());
 
         let mut sim = Self {
             active_religions: SlotMap::with_key(),
             extinct_religions: Vec::new(),
-            rng: SmallRng::seed_from_u64(config.world.seed),
+            rng: SmallRng::seed_from_u64(seed),
+            seed,
             scale: SimulationScale::Individual,
             config,
             current_year: 0,
@@ -112,6 +122,10 @@ impl Simulation {
             .sum()
     }
 
+    pub fn seed(&self) -> u64 {
+        self.seed
+    }
+
     pub fn run_to_readout(&mut self) -> Result<SimulationReadout> {
         self.run_to_readout_with_progress(|_, _| {})
     }
@@ -132,8 +146,12 @@ impl Simulation {
 
     pub fn run(&mut self) -> Result<()> {
         let final_readout = self.run_to_readout()?;
+        let output = EngineRunOutput {
+            seed: self.seed(),
+            readout: final_readout,
+        };
         let readout_json =
-            serde_json::to_string_pretty(&final_readout).context("serializing final readout")?;
+            serde_json::to_string_pretty(&output).context("serializing final readout")?;
         println!("{readout_json}");
 
         Ok(())

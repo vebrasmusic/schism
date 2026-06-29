@@ -26,7 +26,7 @@ pub struct SimulationConfig {
     pub environment: EnvironmentConfig,
 }
 
-/// Top-level run settings: where, how long, how big, and the rng seed.
+/// Top-level run settings: where, how long, how big, and the optional rng seed.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct WorldConfig {
@@ -39,8 +39,8 @@ pub struct WorldConfig {
     /// how many adherents the root religion starts with
     pub starting_population: u32,
 
-    /// rng seed — fix this to reproduce / compare runs
-    pub seed: u64,
+    /// rng seed — set this to reproduce / compare runs; omit for a fresh seed
+    pub seed: Option<u64>,
 
     /// living-adherent count at which the sim switches from Individual to Cohort
     /// scale; beyond this the population is too large to track one-by-one
@@ -238,7 +238,7 @@ impl Default for WorldConfig {
             environment: Environment::default(),
             num_generations: 150,
             starting_population: 500,
-            seed: 67,
+            seed: None,
             cohort_scale_threshold: 1_000_000,
         }
     }

@@ -81,7 +81,7 @@ impl Cli {
                     simulation_config.world.starting_population = starting_population;
                 }
                 if let Some(seed) = seed {
-                    simulation_config.world.seed = seed;
+                    simulation_config.world.seed = Some(seed);
                 }
 
                 simulation_config

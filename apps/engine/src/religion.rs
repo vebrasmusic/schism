@@ -5,6 +5,7 @@ use std::fmt;
 mod naming;
 
 use crate::histogram::PopulationHistogram;
+use crate::probability::UnitInterval;
 use crate::religion::naming::generate_name;
 
 new_key_type! {
@@ -17,18 +18,31 @@ impl fmt::Display for ReligionKey {
     }
 }
 
+/// things a religion can have that change its behavior, also will lead to evolution
+pub struct Phenotype  {
+
+    /// additional multiplier against normal age band birth rates per adherent. higher fertility will lead to more kids in that religion, etc.
+    /// expect tosee this always ve high bc it will punish lower numbers, but as a religion grows could have fertilithy go down like a real religion does. 
+    pub fertility: UnitInterval,
+
+    /// how likely this religion is to try and seek converts. higher evangelism will have higher conversion rates per gen from other religions
+    pub evangelism: UnitInterval,
+}
+
 pub enum Religion {
     Active {
         name: String,
         founding_date: u32,
         parent: Option<ReligionKey>,
         adherents: PopulationHistogram,
+        phenotype: Phenotype
     },
     Extinct {
         name: String,
         founding_date: u32,
         parent: Option<ReligionKey>,
         extinction_date: u32,
+        phenotype: Phenotype
     },
 }
 
@@ -47,7 +61,7 @@ impl Religion {
                 adherents,
             },
             Some((parent_religion_name, parent_id)) => Self::Active {
-                name: generate_name(Some(parent_religion_name), rng),
+                name: generate_name(Some(parent_religion_name), rng)
                 founding_date,
                 parent: Some(parent_id),
                 adherents,
